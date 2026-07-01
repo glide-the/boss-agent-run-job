@@ -1,0 +1,118 @@
+{
+  "chatUrl": "https://www.zhipin.com/web/geek/chat",
+  "startUrl": "https://www.zhipin.com/web/geek/chat",
+  "chatListScrolls": 12,
+  "chatListScrollPixels": 900,
+  "waitTimeoutMs": 25000,
+  "screenshot": true,
+  "outputDir": "output",
+  "jobDetailUrlPattern": "**/job_detail/**",
+  "agentBrowser": {
+    "extensions": [
+      "/Users/dmeck/agent-brower/capsolver-extension",
+      "/Users/dmeck/agent-brower/stealth-extension"
+    ],
+    "state": "/Users/dmeck/agent-brower/my-auth.json",
+    "headed": true
+  },
+  "chatAreaSelectors": [
+    ".chat-container",
+    ".chat-content",
+    "[class*='chat']"
+  ],
+  "conversationListSelectors": [
+    ".friend-list",
+    ".chat-list",
+    "[class*='friend']",
+    "[class*='conversation']"
+  ],
+  "currentChatSelectors": [
+    ".chat-panel",
+    ".message-list",
+    "[class*='message']"
+  ],
+  "jobCardSelectors": [
+    ".job-card",
+    ".position-card",
+    "[class*='job-card']",
+    "[class*='position']"
+  ],
+  "jobDetailLinkSelectors": [
+    "a[href*='/job_detail/']",
+    "a[href*='job_detail']",
+    "[class*='job'] a",
+    "[class*='position'] a"
+  ],
+  "conversationEntryLocators": [
+    {
+      "method": "find-text",
+      "value": "王攀盼",
+      "description": "本次实际观察到的顶部未读会话；点击后右侧出现岗位卡片和查看职位入口"
+    }
+  ],
+  "jobEntryLocators": [
+    {
+      "method": "find-text",
+      "value": "AI技术负责人/研发总监",
+      "description": "本次实际观察到的岗位卡片标题，优先点击岗位信息本体"
+    },
+    {
+      "method": "find-text",
+      "value": "查看职位",
+      "description": "本次实际观察到的岗位卡片按钮"
+    },
+    {
+      "method": "find-text",
+      "value": "职位详情",
+      "description": "聊天卡片或对话中可能出现的岗位详情入口兜底"
+    },
+    {
+      "method": "css",
+      "value": "a[href*='/job_detail/']",
+      "description": "岗位详情链接"
+    },
+    {
+      "method": "css",
+      "value": "a[href*='job_detail']",
+      "description": "岗位详情链接弱匹配"
+    },
+    {
+      "method": "css",
+      "value": "[class*='job'] a",
+      "description": "包含 job 类名区域下的链接兜底"
+    },
+    {
+      "method": "css",
+      "value": "[class*='position'] a",
+      "description": "包含 position 类名区域下的链接兜底"
+    }
+  ],
+  "jobInfoSelectors": {
+    "title": [".job-title", "[class*='job-title']", "h1"],
+    "salary": [".salary", "[class*='salary']", "[class*='red']"],
+    "requirements": [".job-banner", ".job-primary", "[class*='job-primary']"],
+    "description": [".job-sec-text", ".job-detail-section", "[class*='job-sec']"],
+    "company": [".company-info", "[class*='company']"],
+    "recruiter": [".boss-info", "[class*='boss']", "[class*='recruiter']"]
+  },
+  "excludedJobSectionHeadings": [
+    "相似职位",
+    "更多相似职位",
+    "精选职位",
+    "看过该职位的人还看了",
+    "城市招聘",
+    "热门职位",
+    "推荐公司",
+    "热门企业",
+    "其它公司品牌信息",
+    "其他公司品牌信息"
+  ],
+  "returnToChat": {
+    "method": "open-start-url"
+  },
+  "fieldHints": {
+    "salary": ["K", "薪", "元/月"],
+    "requirements": ["经验", "学历", "本科", "大专", "不限"],
+    "company": ["公司", "集团", "科技", "网络", "信息"]
+  }
+}

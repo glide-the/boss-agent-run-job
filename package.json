@@ -1,0 +1,15 @@
+{
+  "name": "boss-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "trace": "bun run src/trace-boss.ts",
+    "trace:dry": "bun run src/trace-boss.ts --dry-run",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "latest"
+  }
+}
