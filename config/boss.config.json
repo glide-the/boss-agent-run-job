@@ -50,6 +50,36 @@
       "description": "本次实际观察到的顶部未读会话；点击后右侧出现岗位卡片和查看职位入口"
     }
   ],
+  "maxJobsPerTarget": 10,
+  "traceTargets": [
+    {
+      "id": "target-wang-panpan",
+      "description": "王攀盼会话内的有限岗位入口采集；同一浏览器 session 内按 locator 顺序尝试，重复 job_id 会被跳过",
+      "maxJobs": 6,
+      "conversationLocator": {
+        "method": "find-text",
+        "value": "王攀盼",
+        "description": "本次实际观察到的顶部未读会话；点击后右侧出现岗位卡片和查看职位入口"
+      },
+      "jobEntryLocators": [
+        {
+          "method": "find-text",
+          "value": "AI技术负责人/研发总监",
+          "description": "本次实际观察到的岗位卡片标题，优先点击岗位信息本体"
+        },
+        {
+          "method": "find-text",
+          "value": "查看职位",
+          "description": "本次实际观察到的岗位卡片按钮"
+        },
+        {
+          "method": "css",
+          "value": "a[href*='/job_detail/']",
+          "description": "岗位详情链接"
+        }
+      ]
+    }
+  ],
   "jobEntryLocators": [
     {
       "method": "find-text",

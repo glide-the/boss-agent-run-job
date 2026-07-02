@@ -36,7 +36,9 @@ config/boss.config.json
 - `chatListScrolls` / `chatListScrollPixels`：一次打开 chat 后滚动收集完整聊天列表
 - `screenshot`：是否截图
 - `conversationEntryLocators`：chat 列表中的联系人定位方式
-- `jobEntryLocators`：联系人聊天区域里的岗位信息定位方式；默认只使用第一个作为单流程入口，避免反复尝试导致页面闪动
+- `traceTargets`：有限目标集合；每个目标有稳定 `id`、联系人 locator、岗位入口 locator 列表和可选 `maxJobs`。如果 `traceTargets` 与 `conversationEntryLocators` 同时存在，会按 `traceTargets` 先执行，再补齐 `conversationEntryLocators` 中未重复的联系人继续执行。
+- `maxJobsPerTarget`：没有在目标上单独设置 `maxJobs` 时，每个目标最多尝试的岗位入口数。超过岗位入口数量时会按 CSS locator 方式补齐，并按顺序执行不同命中的索引，避免单个 locator 重复绑定同一条岗位。
+- `jobEntryLocators`：兼容旧配置的全局岗位入口 locator；当 `traceTargets[*].jobEntryLocators` 缺失时作为兜底
 - `excludedJobSectionHeadings`：岗位详情中不需要采集的尾部推荐区域，如相似职位、精选职位、热门职位、推荐公司等
 
 ## 运行
@@ -58,12 +60,12 @@ bun run trace
 1. 打开 BOSS chat
 2. 在同一个 agent-browser `batch` 中滚动聊天列表，保存完整列表到 `output/chat-list.json`
 3. 在同一浏览器会话内滚回列表顶部，不重新打开 chat
-4. 点击 `conversationEntryLocators` 中配置的联系人
+4. 按 `traceTargets` 中的有限目标点击联系人；未配置 `traceTargets` 时兼容遍历 `conversationEntryLocators`
 5. 保存聊天上下文到 `output/chats.json`、`output/raw/chat-*.txt`
-6. 点击 `jobEntryLocators[0]` 对应岗位信息
-7. 从地址栏 URL 解析 `job_id`，保存招聘信息到 `output/jobs.json`、`output/raw/job-<job_id>.txt`
+6. 在当前聊天里按配置的岗位入口 locator 继续尝试，最多 `maxJobs` / `maxJobsPerTarget` 个
+7. 从地址栏 URL 解析 `job_id`，保存带 `target_id` 的招聘信息到 `output/jobs.json`、`output/raw/job-<job_id>.txt`
 
-正常采集路径只生成一次 `open https://www.zhipin.com/web/geek/chat`。如果需要处理多个已配置联系人，脚本通过浏览器后退返回 chat，不通过重新 `open` 入口页返回。
+正常采集路径只生成一次 `open https://www.zhipin.com/web/geek/chat`。如果需要处理多个已配置联系人或同一联系人内的多个岗位入口，脚本通过浏览器后退返回 chat，不通过重新 `open` 入口页返回。重复解析到同一 `target_id + job_id` 的岗位会被跳过。
 
 如果需要调试页面区域 selector，再显式运行：
 
@@ -71,17 +73,18 @@ bun run trace
 bun run trace -- --inspect-selectors
 ```
 
-这个调试模式会做额外页面探测，页面会更频繁刷新，不建议作为正常采集方式。
+这个调试模式只在当前 trace 的已有 `agent-browser batch/session` 末尾追加 `get count` 探测，不会为每个 selector group、任务或 class probe 重新打开 chat。探测结果写入 `output/selector-inspection.json` 和 `output/trace-events.json`，标记为 debug evidence，不作为正常采集完成证据。
 
 ## 输出
 
 - `output/snapshots/`：chat 页面交互元素快照
 - `output/chat-list.json`：滚动收集到的完整 chat 列表
-- `output/raw/chat-*.txt`：联系人聊天信息原始文本
+- `output/raw/chat-*.txt`：按 `target_id` 保存的联系人聊天信息原始文本
 - `output/raw/job-*.txt`：岗位详情/招聘信息原始文本
 - `output/screenshots/`：岗位详情页截图
-- `output/chats.json`：结构化聊天采集记录
-- `output/jobs.json`：结构化岗位信息
+- `output/chats.json`：结构化聊天采集记录，包含 `target_id`
+- `output/jobs.json`：结构化岗位信息，每条包含 `target_id`、URL 派生的 `job_id`、URL、raw/snapshot 路径
+- `output/selector-inspection.json`：显式 `--inspect-selectors` 的 debug-only selector 计数证据
 - `output/trace-events.json`：自动化轨迹事件
 
 ## 登录态

@@ -5,3 +5,4 @@ output/**/*.txt
 output/**/*.png
 !output/**/.gitkeep
 output
+outputs
