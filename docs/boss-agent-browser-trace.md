@@ -16,11 +16,12 @@
 | 步骤 | 当前页面 | 动作 | 目标区域 | 推荐定位方式 | 等待策略 | 兜底 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | chat 首页 | 打开 URL | 整页 | `agent-browser open <startUrl>` | `wait --load networkidle` | 如果跳登录页，人工登录后重跑 |
-| 2 | chat 对话页 | 保存交互元素 | 会话列表、当前对话、岗位卡片 | `snapshot -i -u -c` | 无 | 保存 snapshot 后人工标注 selector |
-| 3 | chat 对话页 | 点击岗位入口 | 对话中的岗位卡片/岗位链接/职位详情按钮 | `find text "职位详情" click`、`find text "查看职位" click`、`click "a[href*='/job_detail/']"` | `wait --url "**/job_detail/**"` 或 `wait --load networkidle` | 换用 CSS selector 或 role 定位 |
-| 4 | 岗位详情页 | 保存详情页文本 | 岗位详情主内容区 | `read` | `wait --load networkidle` | 先截图，再从 snapshot 定位主区域 |
-| 5 | 岗位详情页 | 截图留证 | 当前视口 | `screenshot output/screenshots/job-N.png` | 无 | 关闭截图配置 |
-| 6 | 岗位详情页 | 回到 chat | 浏览器后退或重新打开入口 | `open <startUrl>` | `wait --load networkidle` | 配置 `browser-back` |
+| 2 | chat 对话页 | 滚动收集完整会话列表 | 会话列表 | `scroll down <px>` + `snapshot -i -u -c` | 每次滚动后短等待 | 滚动结束后在同一会话中滚回顶部 |
+| 3 | chat 对话页 | 点击联系人 | 会话列表联系人 | `find text "<联系人>" click` 或配置的 CSS/role locator | `wait --load networkidle` | 保存 snapshot 后人工标注 selector |
+| 4 | chat 对话页 | 点击岗位入口 | 对话中的岗位卡片/岗位链接/职位详情按钮 | `find text "职位详情" click`、`find text "查看职位" click`、`click "a[href*='/job_detail/']"` | `wait --url "**/job_detail/**"` 或 `wait --load networkidle` | 换用 CSS selector 或 role 定位 |
+| 5 | 岗位详情页 | 保存详情页文本 | 岗位详情主内容区 | `read` | `wait --load networkidle` | 先截图，再从 snapshot 定位主区域 |
+| 6 | 岗位详情页 | 截图留证 | 当前视口 | `screenshot output/screenshots/job-N.png` | 无 | 关闭截图配置 |
+| 7 | 岗位详情页 | 回到 chat | 当前浏览器历史 | `back` | `wait --load networkidle` | 不在正常流程中重新 `open <startUrl>` |
 
 ## 信息区域清单
 
@@ -63,7 +64,7 @@
 ## 可自动化脚本清单
 
 - `src/trace-boss.ts`：主采集脚本
-- `config/boss.config.json`：入口 URL、最大采集数量、候选 locator、输出目录
+- `config/boss.config.json`：入口 URL、滚动次数、候选 locator、输出目录
 - `output/snapshots/`：chat 页面 snapshot
 - `output/raw/`：岗位详情页原始文本
 - `output/screenshots/`：岗位详情页截图
@@ -77,6 +78,7 @@
 - chat 列表可能使用虚拟滚动，未出现在视口中的岗位入口不会被 snapshot 捕获。
 - `@eN` ref 每次 snapshot 都会变化，脚本不依赖固定 ref。
 - 页面动态类名可能变化，CSS selector 需要根据 snapshot 调整。
+- 正常流程只允许一次 `open https://www.zhipin.com/web/geek/chat`；selector 探测只能通过 `--inspect-selectors` 显式开启。
 - 建议小批量低频运行，避免对网站造成压力。
 
 ## 调参建议

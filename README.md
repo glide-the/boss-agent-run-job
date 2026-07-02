@@ -56,11 +56,14 @@ bun run trace
 默认 `trace` 只执行单流程，不做 selector 全量探测：
 
 1. 打开 BOSS chat
-2. 在同一次打开中滚动聊天列表，保存完整列表到 `output/chat-list.json`
-3. 点击 `conversationEntryLocators` 中配置的联系人
-4. 保存聊天上下文到 `output/chats.json`、`output/raw/chat-*.txt`
-5. 点击 `jobEntryLocators[0]` 对应岗位信息
-6. 从地址栏 URL 解析 `job_id`，保存招聘信息到 `output/jobs.json`、`output/raw/job-<job_id>.txt`
+2. 在同一个 agent-browser `batch` 中滚动聊天列表，保存完整列表到 `output/chat-list.json`
+3. 在同一浏览器会话内滚回列表顶部，不重新打开 chat
+4. 点击 `conversationEntryLocators` 中配置的联系人
+5. 保存聊天上下文到 `output/chats.json`、`output/raw/chat-*.txt`
+6. 点击 `jobEntryLocators[0]` 对应岗位信息
+7. 从地址栏 URL 解析 `job_id`，保存招聘信息到 `output/jobs.json`、`output/raw/job-<job_id>.txt`
+
+正常采集路径只生成一次 `open https://www.zhipin.com/web/geek/chat`。如果需要处理多个已配置联系人，脚本通过浏览器后退返回 chat，不通过重新 `open` 入口页返回。
 
 如果需要调试页面区域 selector，再显式运行：
 

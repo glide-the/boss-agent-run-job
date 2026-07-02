@@ -33,7 +33,7 @@ type Config = {
   jobEntryLocators: Locator[];
   jobInfoSelectors: Record<string, string[]>;
   excludedJobSectionHeadings: string[];
-  returnToChat?: { method: "open-start-url" | "browser-back" };
+  returnToChat?: { method: "browser-back" };
   fieldHints?: Record<string, string[]>;
 };
 
@@ -72,6 +72,15 @@ type ChatRecord = {
 };
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const traceMarkerPrefix = "__BOSS_TRACE_MARKER__:";
+const requiredAgentBrowserConfig: AgentBrowserConfig = {
+  extensions: [
+    "/Users/dmeck/agent-brower/capsolver-extension",
+    "/Users/dmeck/agent-brower/stealth-extension"
+  ],
+  state: "/Users/dmeck/agent-brower/my-auth.json",
+  headed: true
+};
 const cliArgs = process.argv.slice(2);
 const dryRun = cliArgs.includes("--dry-run");
 const noScreenshot = cliArgs.includes("--no-screenshot");
@@ -84,6 +93,8 @@ async function main() {
   const out = resolve(projectRoot, config.outputDir);
   await ensureOutputDirs(out);
   await writeFile(join(out, "agent-browser-commands.log"), "");
+  await writeJson(join(out, "chats.json"), []);
+  await writeJson(join(out, "jobs.json"), []);
 
   const baseArgs = buildAgentBrowserBaseArgs(config.agentBrowser);
   await printRunParameters(config, out, baseArgs);
@@ -99,48 +110,50 @@ async function main() {
     await writeJson(join(out, "trace-events.json"), traceEvents);
   };
 
-  const chatList = await collectFullChatList(config, out, trace);
-  await writeJson(join(out, "chat-list.json"), chatList.entries);
-  if (inspectSelectors) {
-    await inspectKnownAreas(config, trace);
-  }
-
-  if (dryRun) {
+  const conversationLocators = config.conversationEntryLocators || [];
+  if (dryRun || conversationLocators.length === 0) {
+    const chatList = await collectFullChatList(config, out, trace);
+    await writeJson(join(out, "chat-list.json"), chatList.entries);
     await trace("dry-run-stop", {
-      message: "已打开 chat 页面并保存 snapshot/read；未点击岗位入口。",
+      message: dryRun
+        ? "已打开 chat 页面并保存 snapshot/read；未点击岗位入口。"
+        : "缺少 conversationEntryLocators，已只收集 chat 列表。",
       next: "查看 output/snapshots/chat-list-full.txt、output/raw/chat-list-full.txt 和 output/chat-list.json 后微调 config/boss.config.json。"
     });
+    if (conversationLocators.length === 0) {
+      await trace("no-conversation-locator", {
+        message: "config.boss.config.json 需要配置 conversationEntryLocators，流程应先从 chat 列表点击联系人。"
+      });
+    }
+    if (inspectSelectors) {
+      await inspectKnownAreas(config, trace);
+    }
+    await trace("done", { jobCount: jobs.length });
     await writeTraceReport(out, traceEvents, jobs);
     return;
   }
 
-  const conversationLocators = config.conversationEntryLocators || [];
-  if (conversationLocators.length === 0) {
-    await trace("no-conversation-locator", {
-      message: "config.boss.config.json 需要配置 conversationEntryLocators，流程应先从 chat 列表点击联系人。"
-    });
+  const result = await runSingleSessionTraceFlow(config, out, conversationLocators, trace);
+  await writeJson(join(out, "chat-list.json"), result.chatList.entries);
+  chats.push(...result.chats);
+  jobs.push(...result.jobs);
+  await writeJson(join(out, "chats.json"), chats);
+  await writeJson(join(out, "jobs.json"), jobs);
+
+  if (inspectSelectors) {
+    await inspectKnownAreas(config, trace);
   }
 
-  for (let i = 0; i < conversationLocators.length; i++) {
-    const result = await runSingleContactJobFlow(config, out, i + 1, conversationLocators[i], trace);
-    chats.push(result.chat);
-    await writeJson(join(out, "chats.json"), chats);
-
-    if (result.job) {
-      jobs.push(result.job);
-      await writeJson(join(out, "jobs.json"), jobs);
-      await trace("job-collected", result.job);
-    }
-  }
-
-  await writeTraceReport(out, traceEvents, jobs);
   await trace("done", { jobCount: jobs.length });
+  await writeTraceReport(out, traceEvents, jobs);
 }
 
 async function loadConfig(): Promise<Config> {
   const configPath = join(projectRoot, "config", "boss.config.json");
   const text = await readFile(configPath, "utf8");
-  return JSON.parse(text) as Config;
+  const config = JSON.parse(text) as Config;
+  validateAgentBrowserConfig(config.agentBrowser);
+  return config;
 }
 
 function chatUrl(config: Config) {
@@ -155,6 +168,24 @@ function buildAgentBrowserBaseArgs(agentConfig: AgentBrowserConfig) {
   base.push("--state", agentConfig.state);
   if (agentConfig.headed) base.push("--headed");
   return base;
+}
+
+function validateAgentBrowserConfig(agentConfig: AgentBrowserConfig) {
+  const missing: string[] = [];
+  for (const extension of requiredAgentBrowserConfig.extensions) {
+    if (!agentConfig.extensions.includes(extension)) {
+      missing.push(`--extension ${extension}`);
+    }
+  }
+  if (agentConfig.state !== requiredAgentBrowserConfig.state) {
+    missing.push(`--state ${requiredAgentBrowserConfig.state}`);
+  }
+  if (agentConfig.headed !== requiredAgentBrowserConfig.headed) {
+    missing.push("--headed");
+  }
+  if (missing.length > 0) {
+    throw new Error(`agentBrowser 配置缺少必需启动参数: ${missing.join(", ")}`);
+  }
 }
 
 async function printRunParameters(config: Config, outputDir: string, agentBrowserBaseArgs: string[]) {
@@ -227,6 +258,180 @@ async function collectFullChatList(
   return { rawTextFile: join(config.outputDir, "raw", "chat-list-full.txt"), entries };
 }
 
+async function runSingleSessionTraceFlow(
+  config: Config,
+  out: string,
+  conversationLocators: Locator[],
+  trace: (step: string, detail?: unknown) => Promise<void>
+) {
+  const jobLocator = config.jobEntryLocators[0];
+  if (!jobLocator) {
+    throw new Error("config.jobEntryLocators 至少需要一个岗位入口 locator");
+  }
+
+  const scrolls = Math.max(0, config.chatListScrolls);
+  const scrollPixels = Math.max(100, config.chatListScrollPixels);
+  const commands = [
+    command("open", chatUrl(config)),
+    "wait --load networkidle",
+    markerCommand("chat-list-start"),
+    "get url",
+    "get title",
+    "snapshot -i -u -c"
+  ];
+
+  for (let i = 0; i < scrolls; i++) {
+    commands.push(command("scroll", "down", String(scrollPixels)));
+    commands.push("wait 300");
+    commands.push("snapshot -i -u -c");
+  }
+
+  commands.push("read");
+  commands.push(markerCommand("chat-list-end"));
+
+  for (let i = 0; i < scrolls; i++) {
+    commands.push(command("scroll", "up", String(scrollPixels)));
+    commands.push("wait 150");
+  }
+  if (scrolls > 0) {
+    commands.push("snapshot -i -u -c");
+  }
+
+  for (let i = 0; i < conversationLocators.length; i++) {
+    const index = i + 1;
+    const conversationLocator = conversationLocators[i];
+    const screenshotFile = config.screenshot ? join(config.outputDir, "screenshots", `job-${index}.png`) : undefined;
+
+    commands.push(markerCommand(`flow-${index}-start`));
+    commands.push(locatorToClickCommand(conversationLocator));
+    commands.push("wait --load networkidle");
+    commands.push(markerCommand(`chat-${index}-start`));
+    commands.push("get url");
+    commands.push("get title");
+    commands.push("snapshot -i -u -c");
+    commands.push("read");
+    commands.push(markerCommand(`chat-${index}-end`));
+    commands.push(locatorToClickCommand(jobLocator));
+    commands.push("wait --load networkidle");
+    commands.push(command("wait", "--url", config.jobDetailUrlPattern));
+    commands.push(markerCommand(`job-${index}-start`));
+    commands.push("get url");
+    commands.push("get title");
+    commands.push("snapshot -i -u -c");
+    commands.push("read");
+    if (screenshotFile) {
+      commands.push(command("screenshot", join(projectRoot, screenshotFile)));
+    }
+    commands.push(markerCommand(`job-${index}-end`));
+    commands.push(markerCommand(`flow-${index}-end`));
+
+    if (i < conversationLocators.length - 1) {
+      commands.push(...returnToChatCommands());
+    }
+  }
+
+  await trace("single-session-flow-start", {
+    steps: [
+      "open-chat-once",
+      "collect-full-chat-list",
+      "scroll-list-back",
+      "click-contact",
+      "collect-chat",
+      "click-job",
+      "collect-job"
+    ],
+    scrolls,
+    scrollPixels,
+    conversationCount: conversationLocators.length,
+    jobLocator
+  });
+
+  const output = await runBatch(config, commands, { optional: true });
+  const singleSessionRawFile = join(config.outputDir, "raw", "single-session-flow.txt");
+  await writeFile(join(projectRoot, singleSessionRawFile), output);
+
+  const chatListSegment = extractMarkedSegment(output, "chat-list-start", "chat-list-end") || output;
+  await writeFile(join(out, "snapshots", "chat-list-full.txt"), chatListSegment);
+  await writeFile(join(out, "raw", "chat-list-full.txt"), chatListSegment);
+  const entries = extractChatListEntries(chatListSegment);
+  await trace("chat-list-collected", { count: entries.length, rawTextFile: join(config.outputDir, "raw", "chat-list-full.txt") });
+
+  const chats: ChatRecord[] = [];
+  const jobs: JobRecord[] = [];
+  for (let i = 0; i < conversationLocators.length; i++) {
+    const index = i + 1;
+    const conversationLocator = conversationLocators[i];
+    const flowRawFile = join(config.outputDir, "raw", `flow-${index}.txt`);
+    const chatRawFile = join(config.outputDir, "raw", `chat-${index}.txt`);
+    const chatSnapshotFile = join(config.outputDir, "snapshots", `chat-contact-${index}.txt`);
+    const jobRawFile = join(config.outputDir, "raw", `job-${index}.txt`);
+    const jobSnapshotFile = join(config.outputDir, "snapshots", `job-detail-${index}.txt`);
+    const screenshotFile = config.screenshot ? join(config.outputDir, "screenshots", `job-${index}.png`) : undefined;
+
+    const flowSegment = extractMarkedSegment(output, `flow-${index}-start`, `flow-${index}-end`) || output;
+    const chatSegment = extractMarkedSegment(output, `chat-${index}-start`, `chat-${index}-end`) || flowSegment;
+    const jobSegment = extractMarkedSegment(output, `job-${index}-start`, `job-${index}-end`) || flowSegment;
+
+    await writeFile(join(projectRoot, flowRawFile), flowSegment);
+    await writeFile(join(projectRoot, chatRawFile), chatSegment);
+    await writeFile(join(projectRoot, chatSnapshotFile), chatSegment);
+
+    const chat: ChatRecord = {
+      contactLocator: conversationLocator,
+      collectedAt: new Date().toISOString(),
+      rawTextFile: chatRawFile,
+      snapshotFile: chatSnapshotFile
+    };
+    chats.push(chat);
+
+    await trace("chat-collected", {
+      index,
+      contactLocator: conversationLocator,
+      rawTextFile: chatRawFile,
+      snapshotFile: chatSnapshotFile
+    });
+
+    const currentUrl = lastUrl(jobSegment);
+    const currentTitle = lastNonEmptyLine(jobSegment.replace(currentUrl || "", ""));
+    if (!looksLikeJobDetail(currentUrl, config)) {
+      await trace("job-not-collected", {
+        index,
+        reason: "点击岗位入口后未进入 job_detail URL",
+        currentUrl,
+        currentTitle,
+        jobLocator,
+        flowRawFile
+      });
+      continue;
+    }
+
+    const jobId = extractJobId(currentUrl);
+    const cleanJobText = cleanJobDetailText(jobSegment, config.excludedJobSectionHeadings);
+    const resolvedJobRawFile = jobId ? join(config.outputDir, "raw", `job-${jobId}.txt`) : jobRawFile;
+    const resolvedJobSnapshotFile = jobId ? join(config.outputDir, "snapshots", `job-detail-${jobId}.txt`) : jobSnapshotFile;
+    await writeFile(join(projectRoot, resolvedJobRawFile), cleanJobText);
+    await writeFile(join(projectRoot, resolvedJobSnapshotFile), cleanJobText);
+
+    const job = {
+      ...parseJobText(cleanJobText),
+      job_id: jobId || safeName(currentUrl),
+      url: currentUrl,
+      collectedAt: new Date().toISOString(),
+      rawTextFile: resolvedJobRawFile,
+      snapshotFile: resolvedJobSnapshotFile,
+      screenshotFile
+    };
+    jobs.push(job);
+    await trace("job-collected", job);
+  }
+
+  return {
+    chatList: { rawTextFile: join(config.outputDir, "raw", "chat-list-full.txt"), entries },
+    chats,
+    jobs
+  };
+}
+
 function extractChatListEntries(text: string): ChatListEntry[] {
   const seen = new Set<string>();
   const entries: ChatListEntry[] = [];
@@ -239,108 +444,6 @@ function extractChatListEntries(text: string): ChatListEntry[] {
     entries.push({ index: entries.length + 1, text: value });
   }
   return entries;
-}
-
-async function runSingleContactJobFlow(
-  config: Config,
-  out: string,
-  index: number,
-  conversationLocator: Locator,
-  trace: (step: string, detail?: unknown) => Promise<void>
-): Promise<{ chat: ChatRecord; job?: JobRecord }> {
-  const jobLocator = config.jobEntryLocators[0];
-  if (!jobLocator) {
-    throw new Error("config.jobEntryLocators 至少需要一个岗位入口 locator");
-  }
-
-  const flowRawFile = join(config.outputDir, "raw", `flow-${index}.txt`);
-  const chatRawFile = join(config.outputDir, "raw", `chat-${index}.txt`);
-  const chatSnapshotFile = join(config.outputDir, "snapshots", `chat-contact-${index}.txt`);
-  const jobRawFile = join(config.outputDir, "raw", `job-${index}.txt`);
-  const jobSnapshotFile = join(config.outputDir, "snapshots", `job-detail-${index}.txt`);
-  const screenshotFile = config.screenshot ? join(config.outputDir, "screenshots", `job-${index}.png`) : undefined;
-
-  await trace("single-flow-start", {
-    index,
-    steps: ["open-chat", "click-contact", "collect-chat", "click-job", "collect-job"],
-    conversationLocator,
-    jobLocator
-  });
-
-  const commands = [
-    command("open", chatUrl(config)),
-    "wait --load networkidle",
-    "get url",
-    "get title",
-    "snapshot -i -u -c",
-    locatorToClickCommand(conversationLocator),
-    "wait --load networkidle",
-    "get url",
-    "get title",
-    "snapshot -i -u -c",
-    "read",
-    locatorToClickCommand(jobLocator),
-    "wait --load networkidle",
-    command("wait", "--url", config.jobDetailUrlPattern),
-    "get url",
-    "get title",
-    "snapshot -i -u -c",
-    "read",
-    ...(screenshotFile ? [command("screenshot", join(projectRoot, screenshotFile))] : [])
-  ];
-
-  const output = await runBatch(config, commands, { optional: true });
-  await writeFile(join(projectRoot, flowRawFile), output);
-  await writeFile(join(projectRoot, chatRawFile), output);
-  await writeFile(join(projectRoot, chatSnapshotFile), output);
-
-  const currentUrl = lastUrl(output);
-  const currentTitle = lastNonEmptyLine(output.replace(currentUrl || "", ""));
-  const chat: ChatRecord = {
-    contactLocator: conversationLocator,
-    collectedAt: new Date().toISOString(),
-    rawTextFile: chatRawFile,
-    snapshotFile: chatSnapshotFile
-  };
-
-  await trace("chat-collected", {
-    index,
-    contactLocator: conversationLocator,
-    rawTextFile: chatRawFile,
-    snapshotFile: chatSnapshotFile
-  });
-
-  if (!looksLikeJobDetail(currentUrl, config)) {
-    await trace("job-not-collected", {
-      index,
-      reason: "点击岗位入口后未进入 job_detail URL",
-      currentUrl,
-      currentTitle,
-      jobLocator,
-      flowRawFile
-    });
-    return { chat };
-  }
-
-  const jobId = extractJobId(currentUrl);
-  const cleanJobText = cleanJobDetailText(output, config.excludedJobSectionHeadings);
-  const resolvedJobRawFile = jobId ? join(config.outputDir, "raw", `job-${jobId}.txt`) : jobRawFile;
-  const resolvedJobSnapshotFile = jobId ? join(config.outputDir, "snapshots", `job-detail-${jobId}.txt`) : jobSnapshotFile;
-  await writeFile(join(projectRoot, resolvedJobRawFile), cleanJobText);
-  await writeFile(join(projectRoot, resolvedJobSnapshotFile), cleanJobText);
-
-  return {
-    chat,
-    job: {
-      ...parseJobText(cleanJobText),
-      job_id: jobId || safeName(currentUrl),
-      url: currentUrl,
-      collectedAt: new Date().toISOString(),
-      rawTextFile: resolvedJobRawFile,
-      snapshotFile: resolvedJobSnapshotFile,
-      screenshotFile
-    }
-  };
 }
 
 async function inspectKnownAreas(
@@ -406,27 +509,39 @@ function parseJobText(text: string): Partial<JobRecord> {
   };
 }
 
-function extractJobId(url: string) {
+export function extractJobId(url: string) {
   return url.match(/\/job_detail\/([^/?#]+?)(?:\.html)?(?:[?#].*)?$/)?.[1];
 }
 
-function cleanJobDetailText(text: string, excludedHeadings: string[]) {
+export function cleanJobDetailText(text: string, excludedHeadings: string[]) {
   const headings = excludedHeadings.length > 0
     ? excludedHeadings
     : ["相似职位", "更多相似职位", "精选职位", "看过该职位的人还看了", "城市招聘", "热门职位", "推荐公司", "热门企业"];
   const allLines = text.split(/\r?\n/);
-  const headingIndex = findLastLineIndex(allLines, (line) => line.trim().startsWith("# "));
+  const headingIndex = allLines.findIndex((line) => {
+    const normalized = normalizeJobLine(line);
+    return line.trim().startsWith("# ") && !containsExcludedJobHeading(normalized, headings);
+  });
   const lines = headingIndex >= 0 ? allLines.slice(headingIndex) : allLines;
   const cleaned: string[] = [];
 
   for (const line of lines) {
-    const normalized = line.replace(/^[-#\s]+/, "").trim();
-    if (headings.some((heading) => normalized.includes(heading))) break;
+    const normalized = normalizeJobLine(line);
+    if (containsExcludedJobHeading(normalized, headings)) break;
     if (isExcludedJobNoise(normalized)) continue;
+    if (line.includes(traceMarkerPrefix)) continue;
     cleaned.push(line);
   }
 
   return `${cleaned.join("\n").trim()}\n`;
+}
+
+function normalizeJobLine(line: string) {
+  return line.replace(/^[-#\s]+/, "").trim();
+}
+
+function containsExcludedJobHeading(line: string, headings: string[]) {
+  return headings.some((heading) => line.includes(heading));
 }
 
 function isExcludedJobNoise(line: string) {
@@ -442,13 +557,6 @@ function isExcludedJobNoise(line: string) {
     "其它公司品牌信息",
     "其他公司品牌信息"
   ].some((keyword) => line.includes(keyword));
-}
-
-function findLastLineIndex(lines: string[], predicate: (line: string) => boolean) {
-  for (let index = lines.length - 1; index >= 0; index--) {
-    if (predicate(lines[index])) return index;
-  }
-  return -1;
 }
 
 function firstMeaningfulLine(lines: string[]) {
@@ -499,6 +607,34 @@ async function writeJson(path: string, value: unknown) {
 
 function safeName(input: string) {
   return input.replace(/[^a-z0-9._-]+/gi, "-").toLowerCase();
+}
+
+function markerCommand(label: string) {
+  return command("eval", JSON.stringify(`${traceMarkerPrefix}${label}`));
+}
+
+function extractMarkedSegment(output: string, startLabel: string, endLabel: string) {
+  const startMarker = `${traceMarkerPrefix}${startLabel}`;
+  const endMarker = `${traceMarkerPrefix}${endLabel}`;
+  const startIndex = output.indexOf(startMarker);
+  if (startIndex < 0) return "";
+
+  const segmentStart = output.indexOf("\n", startIndex);
+  const endIndex = output.indexOf(endMarker, segmentStart >= 0 ? segmentStart : startIndex);
+  const rawSegment = output.slice(segmentStart >= 0 ? segmentStart + 1 : startIndex, endIndex >= 0 ? endIndex : undefined);
+  return rawSegment
+    .split(/\r?\n/)
+    .filter((line) => !line.includes(traceMarkerPrefix))
+    .join("\n")
+    .trim();
+}
+
+function returnToChatCommands() {
+  return [
+    "back",
+    "wait --load networkidle",
+    "snapshot -i -u -c"
+  ];
 }
 
 async function agent(config: Config, args: string[], options: { optional?: boolean } = {}) {
@@ -581,7 +717,9 @@ function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}

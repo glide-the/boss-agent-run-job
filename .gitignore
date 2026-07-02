@@ -4,3 +4,4 @@ output/**/*.json
 output/**/*.txt
 output/**/*.png
 !output/**/.gitkeep
+output

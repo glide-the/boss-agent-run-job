@@ -108,7 +108,7 @@
     "其他公司品牌信息"
   ],
   "returnToChat": {
-    "method": "open-start-url"
+    "method": "browser-back"
   },
   "fieldHints": {
     "salary": ["K", "薪", "元/月"],
