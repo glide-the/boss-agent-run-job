@@ -51,27 +51,20 @@ async function main() {
   };
 
   const conversationLocators = config.conversationEntryLocators || [];
-  const hasTraceTargets = (config.traceTargets?.length || 0) > 0;
-  if (dryRun || (!hasTraceTargets && conversationLocators.length === 0)) {
-    const chatList = await collectFullChatList(
-      config,
-      out,
-      trace,
-      inspectSelectors,
-      chatUrl(config)
-    );
-    await writeJson(join(out, "chat-list.json"), chatList.entries);
+  const chatList = await collectFullChatList(
+    config,
+    out,
+    trace,
+    inspectSelectors,
+    chatUrl(config)
+  );
+  await writeJson(join(out, "chat-list.json"), chatList.entries);
+
+  if (dryRun) {
     await trace("dry-run-stop", {
-      message: dryRun
-        ? "已打开 chat 页面并保存 snapshot/read；未点击岗位入口。"
-        : "缺少 conversationEntryLocators，已只收集 chat 列表。",
+      message: "已打开 chat 页面并保存 snapshot/read；未点击岗位入口。",
       next: "查看 output/snapshots/chat-list-full.txt、output/raw/chat-list-full.txt 和 output/chat-list.json 后微调 config/boss.config.json。"
     });
-    if (!hasTraceTargets && conversationLocators.length === 0) {
-      await trace("no-conversation-locator", {
-        message: "config.boss.config.json 需要配置 conversationEntryLocators，流程应先从 chat 列表点击联系人。"
-      });
-    }
     await trace("done", { jobCount: jobs.length });
     await writeTraceReport(out, traceEvents, jobs);
     return;
@@ -80,6 +73,7 @@ async function main() {
   const result = await runSingleSessionTraceFlow(
     config,
     out,
+    chatList.entries,
     conversationLocators,
     trace,
     inspectSelectors

@@ -1,6 +1,6 @@
 # boss-agent
 
-Bun + agent-browser 的 BOSS 直聘轨迹采集项目，用来记录并执行单个流程：从 chat 列表点击联系人，采集聊天信息，再点击聊天里的岗位信息，采集招聘信息。
+Bun + agent-browser 的 BOSS 直聘轨迹采集项目，用来记录并执行以左侧聊天列表所有对话为 source of truth 的单条轨迹：从 chat 列表发现联系人，采集聊天信息，再点击当前会话绑定的岗位信息，采集招聘信息。
 
 ## 前置条件
 
@@ -35,11 +35,12 @@ config/boss.config.json
 - `startUrl`：chat 页面入口
 - `chatListScrolls` / `chatListScrollPixels`：一次打开 chat 后滚动收集完整聊天列表
 - `screenshot`：是否截图
-- `conversationEntryLocators`：chat 列表中的联系人定位方式
-- `traceTargets`：有限目标集合；每个目标有稳定 `id`、联系人 locator、岗位入口 locator 列表和可选 `maxJobs`。如果 `traceTargets` 与 `conversationEntryLocators` 同时存在，会按 `traceTargets` 先执行，再补齐 `conversationEntryLocators` 中未重复的联系人继续执行。正常流程只接受当前聊天会话里真实绑定的首个有效岗位入口，不把推荐页 / 未知岗位当作正常目标。
-- `maxJobsPerTarget`：历史兼容字段，不再驱动 normal flow 的多岗位扩张；正常流程只记录一个当前会话绑定 job。
-- `jobEntryLocators`：兼容旧配置的全局岗位入口 locator；当 `traceTargets[*].jobEntryLocators` 缺失时作为兜底。正常流程只使用当前会话里真实出现的首个有效岗位入口，不要把推荐页链接写进正常链路。
+- `conversationEntryLocators`：左侧对话发现的兼容覆盖输入；正常流程以左侧列表发现结果为 source of truth，不再把单个联系人写死为默认目标
+- `traceTargets`：可选的 per-target override；如果配置，会与左侧列表发现结果合并，并保留 `target_id`、`leftIndex`、`targetProvenance`，不要把它当成单目标 normal flow 的全集
+- `maxJobsPerTarget`：历史兼容字段，不再驱动 normal flow 的多岗位扩张；正常流程只记录一个当前会话绑定 job
+- `jobEntryLocators`：当前会话里岗位入口的兼容候选；只接受第一个有效项，推荐页 / 未知岗位不要写入正常链路
 - `excludedJobSectionHeadings`：岗位详情中不需要采集的尾部推荐区域，如相似职位、精选职位、热门职位、推荐公司等
+- `jobInfoSelectors`：岗位详情页字段 selector 的预留配置，当前采集主要依赖 raw text 后处理，后续可继续扩展
 
 ## 运行
 
@@ -60,12 +61,12 @@ bun run trace
 1. 打开 BOSS chat
 2. 在同一个 agent-browser `batch` 中滚动聊天列表，保存完整列表到 `output/chat-list.json`
 3. 在同一浏览器会话内滚回列表顶部，不重新打开 chat
-4. 按 `traceTargets` 中的有限目标点击联系人；未配置 `traceTargets` 时兼容遍历 `conversationEntryLocators`
-5. 保存聊天上下文到 `output/chats.json`、`output/raw/chat-*.txt`
+4. 以左侧列表发现结果为主，按发现顺序点击联系人；`traceTargets` 和 `conversationEntryLocators` 只作为兼容 override
+5. 保存聊天上下文到 `output/chats.json`、`output/raw/chat-*.txt`，并写入 `target_id`、`leftIndex`、`targetProvenance`
 6. 在当前聊天会话绑定的岗位入口里只接受第一个有效项，每个 target 只记录 1 个 job
-7. 从地址栏 URL 解析 `job_id`，保存带 `target_id` 的招聘信息到 `output/jobs.json`、`output/raw/job-<job_id>.txt`
+7. 从地址栏 URL 解析 `job_id`，保存带 `target_id`、`leftIndex`、`targetProvenance` 的招聘信息到 `output/jobs.json`、`output/raw/job-<job_id>.txt`，并补充 `description`、`skills`、`company_scale`、`industry`
 
-正常采集路径只生成一次 `open https://www.zhipin.com/web/geek/chat`。如果需要处理多个已配置联系人，脚本通过浏览器后退返回 chat，不通过重新 `open` 入口页返回。每个 `target_id` 只接受一个 job；重复解析到同一 `target_id + job_id` 的岗位会被跳过，推荐页 / `job_sug_*` / `/recommend/` 链接不会被当作有效岗位入口。
+正常采集路径只生成一次 `open https://www.zhipin.com/web/geek/chat`。如果需要处理多个已发现联系人，脚本通过浏览器后退返回 chat，不通过重新 `open` 入口页返回。每个 `target_id` 只接受一个 job；重复解析到同一 `target_id + job_id` 的岗位会被跳过，推荐页 / `job_sug_*` / `/recommend/` 链接不会被当作有效岗位入口。
 
 如果需要调试页面区域 selector，再显式运行：
 
@@ -73,7 +74,7 @@ bun run trace
 bun run trace -- --inspect-selectors
 ```
 
-这个调试模式只在当前 trace 的已有 `agent-browser batch/session` 末尾追加 `get count` 探测，不会为每个 selector group、任务或 class probe 重新打开 chat。探测结果写入 `output/selector-inspection.json` 和 `output/trace-events.json`，标记为 debug evidence，不作为正常采集完成证据。
+这个调试模式只在当前 trace 的已有 `agent-browser batch/session` 末尾追加 `get count` 探测，不会为每个 selector group、任务或 class probe 重新打开 chat。探测结果写入 `output/selector-inspection.json` 和 `output/trace-events.json`，标记为 debug evidence，不作为正常采集完成证据。debug 路径必须复用 normal flow 的 target cardinality。
 
 ## 输出
 
@@ -82,8 +83,8 @@ bun run trace -- --inspect-selectors
 - `output/raw/chat-*.txt`：按 `target_id` 保存的联系人聊天信息原始文本
 - `output/raw/job-*.txt`：岗位详情/招聘信息原始文本
 - `output/screenshots/`：岗位详情页截图
-- `output/chats.json`：结构化聊天采集记录，包含 `target_id`
-- `output/jobs.json`：结构化岗位信息，每条包含 `target_id`、URL 派生的 `job_id`、URL、raw/snapshot 路径
+- `output/chats.json`：结构化聊天采集记录，包含 `target_id`、`leftIndex`、`targetProvenance`
+- `output/jobs.json`：结构化岗位信息，每条包含 `target_id`、`leftIndex`、`targetProvenance`、URL 派生的 `job_id`、URL、`description`、`skills`、`company_scale`、`industry` 以及 raw/snapshot 路径
 - `output/selector-inspection.json`：显式 `--inspect-selectors` 的 debug-only selector 计数证据
 - `output/trace-events.json`：自动化轨迹事件
 
@@ -105,7 +106,7 @@ output/snapshots/chat-initial.txt
 
 ### 采集字段不完整
 
-当前脚本先保存原始文本，再用保守规则抽取标题、薪资、城市、经验、学历、公司、招聘者。后续可以基于实际 raw text 和 selector 扩展更精确的字段解析。
+当前脚本会保存原始文本，并用保守规则抽取标题、薪资、城市、经验、学历、岗位描述、技能标签、公司、公司规模、行业和招聘者。若页面结构变化，再基于实际 raw text 和 selector 调整字段解析。左侧列表发现的顺序、`leftIndex` 和 `targetProvenance` 需要和输出一起保留，方便 coverage audit。
 
 ### 触发验证码或风控
 

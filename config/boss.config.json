@@ -63,18 +63,38 @@
       },
       "jobEntryLocators": [
         {
-          "method": "find-text",
-          "value": "AI技术负责人/研发总监",
-          "description": "本次实际观察到的岗位卡片标题，优先点击岗位信息本体"
+          "method": "dom-text",
+          "value": "查看职位",
+          "description": "会话页中的当前岗位 CTA，直接点击可进入 job_detail"
+        },
+        {
+          "method": "dom-text",
+          "value": "职位详情",
+          "description": "兼容不同会话卡片文案的岗位 CTA"
+        },
+        {
+          "method": "css",
+          "value": "a[href*='/job_detail/']",
+          "description": "直接命中的岗位详情链接，作为 DOM 文本点击的 CSS 兜底"
         }
       ]
     }
   ],
   "jobEntryLocators": [
     {
-      "method": "find-text",
-      "value": "AI技术负责人/研发总监",
-      "description": "本次实际观察到的岗位卡片标题，优先点击岗位信息本体"
+      "method": "dom-text",
+      "value": "查看职位",
+      "description": "会话页中的当前岗位 CTA，直接点击可进入 job_detail"
+    },
+    {
+      "method": "dom-text",
+      "value": "职位详情",
+      "description": "兼容不同会话卡片文案的岗位 CTA"
+    },
+    {
+      "method": "css",
+      "value": "a[href*='/job_detail/']",
+      "description": "直接命中的岗位详情链接，作为 DOM 文本点击的 CSS 兜底"
     }
   ],
   "jobInfoSelectors": {

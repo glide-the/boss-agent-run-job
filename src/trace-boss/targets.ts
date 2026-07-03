@@ -1,37 +1,63 @@
-import type { Config, Locator, RuntimeTraceTarget, TraceTargetConfig } from "./types";
+import type { ChatListEntry, Config, Locator, RuntimeTraceTarget, TraceTargetConfig } from "./types";
 import { command, markerCommand } from "./commands";
 
-export function resolveTraceTargets(config: Config, conversationLocators: Locator[]): RuntimeTraceTarget[] {
-  if (config.traceTargets?.length) {
-    const mergedTargets = config.traceTargets.map((target, index) => ({
-      target_id: target.id?.trim() || `target-${index + 1}`,
-      description: target.description,
-      conversationLocator: target.conversationLocator,
-      jobEntryLocators: limitJobLocators(config, target)
-    }));
-    const existingTargets = new Set(mergedTargets.map((target) => locatorSignature(target.conversationLocator)));
-
-    for (const conversationLocator of conversationLocators) {
-      const signature = locatorSignature(conversationLocator);
-      if (existingTargets.has(signature)) continue;
-
-      mergedTargets.push({
-        target_id: `target-${mergedTargets.length + 1}`,
-        description: undefined,
-        conversationLocator,
-        jobEntryLocators: limitJobLocators(config)
-      });
-      existingTargets.add(signature);
-    }
-
-    return mergedTargets;
-  }
-
-  return conversationLocators.map((conversationLocator, index) => ({
-    target_id: `target-${index + 1}`,
-    conversationLocator,
+export function resolveTraceTargets(
+  config: Config,
+  discoveredEntries: ChatListEntry[],
+  compatibilityLocators: Locator[] = []
+): RuntimeTraceTarget[] {
+  const targets: RuntimeTraceTarget[] = discoveredEntries.map((entry) => ({
+    target_id: `chat-list-target-${entry.leftIndex}`,
+    description: entry.text,
+    leftIndex: entry.leftIndex,
+    targetProvenance: "discovered" as const,
+    conversationLocator: {
+      method: "find-text",
+      value: entry.text
+    },
     jobEntryLocators: limitJobLocators(config)
   }));
+
+  const claimedTargetIndexes = new Set<number>();
+
+  for (const target of config.traceTargets || []) {
+    const matchIndex = findMatchingTargetIndex(targets, target.conversationLocator, claimedTargetIndexes);
+    if (matchIndex >= 0) {
+      const matchedTarget = targets[matchIndex];
+      targets[matchIndex] = {
+        ...matchedTarget,
+        target_id: target.id?.trim() || matchedTarget.target_id,
+        description: target.description || matchedTarget.description,
+        jobEntryLocators: limitJobLocators(config, target)
+      };
+      claimedTargetIndexes.add(matchIndex);
+      continue;
+    }
+
+    targets.push({
+      target_id: target.id?.trim() || `config-only-target-${targets.length + 1}`,
+      description: target.description,
+      leftIndex: undefined,
+      targetProvenance: "config-only",
+      conversationLocator: target.conversationLocator,
+      jobEntryLocators: limitJobLocators(config, target)
+    });
+  }
+
+  for (const locator of compatibilityLocators) {
+    if (targets.some((target) => locatorMatchesTarget(target, locator))) continue;
+
+    targets.push({
+      target_id: `fallback-target-${targets.length + 1}`,
+      description: undefined,
+      leftIndex: undefined,
+      targetProvenance: "fallback",
+      conversationLocator: locator,
+      jobEntryLocators: limitJobLocators(config)
+    });
+  }
+
+  return targets;
 }
 
 export function limitJobLocators(config: Config, target?: TraceTargetConfig) {
@@ -42,12 +68,16 @@ export function limitJobLocators(config: Config, target?: TraceTargetConfig) {
     throw new Error("每个 trace target 至少需要一个岗位入口 locator");
   }
 
-  // Normal flow only accepts the first current-session-bound job locator per target.
-  return locators.slice(0, 1);
+  // Normal flow tries locators in order and stops after the first accepted job.
+  return [...locators];
 }
 
 export function locatorSignature(locator: Locator) {
   if (locator.method === "find-text") {
+    return `${locator.method}:${locator.value}:${locator.exact ? "exact" : "contains"}`;
+  }
+
+  if (locator.method === "dom-text") {
     return `${locator.method}:${locator.value}:${locator.exact ? "exact" : "contains"}`;
   }
 
@@ -56,6 +86,36 @@ export function locatorSignature(locator: Locator) {
   }
 
   return `${locator.method}:${locator.value}`;
+}
+
+function findMatchingTargetIndex(
+  targets: RuntimeTraceTarget[],
+  locator: Locator,
+  claimedTargetIndexes: Set<number>
+) {
+  for (let i = 0; i < targets.length; i++) {
+    if (claimedTargetIndexes.has(i)) continue;
+    if (locatorMatchesTarget(targets[i], locator)) return i;
+  }
+
+  return -1;
+}
+
+function locatorMatchesTarget(target: RuntimeTraceTarget, locator: Locator) {
+  if (target.conversationLocator.method === "find-text" && locator.method === "find-text") {
+    const targetText = target.conversationLocator.value;
+    return targetText.includes(locator.value) || locator.value.includes(targetText);
+  }
+
+  if (locatorSignature(target.conversationLocator) === locatorSignature(locator)) {
+    return true;
+  }
+
+  if (target.description && locator.method === "find-text") {
+    return target.description.includes(locator.value);
+  }
+
+  return false;
 }
 
 export function appendSelectorInspectionCommands(commands: string[], config: Config, context: string) {

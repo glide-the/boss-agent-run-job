@@ -56,6 +56,10 @@ export function locatorToClickCommand(locator: Locator, cssOccurrence?: number) 
       : command("find", "text", locator.value, "click");
   }
 
+  if (locator.method === "dom-text") {
+    return command("eval", buildDomTextClickScript(locator.value, locator.exact));
+  }
+
   if (locator.method === "css") {
     if (cssOccurrence && cssOccurrence > 1) {
       const script = `(() => {\n  const nodes = Array.from(document.querySelectorAll(${JSON.stringify(locator.value)}));\n  const target = nodes[${cssOccurrence - 1}];\n  if (!target) return \"not-found\";\n  target.click();\n  return \"clicked\";\n})();`;
@@ -65,6 +69,15 @@ export function locatorToClickCommand(locator: Locator, cssOccurrence?: number) 
   }
 
   return command("find", "role", locator.role, "click", "--name", locator.name);
+}
+
+export function buildDomTextClickScript(value: string, exact = false) {
+  const textLiteral = JSON.stringify(value);
+  const comparison = exact
+    ? `normalized === ${textLiteral}`
+    : `normalized.includes(${textLiteral})`;
+
+  return `(() => {\n  const normalize = (text) => (text || "").replace(/\\s+/g, " ").trim();\n  const matches = (node) => {\n    const normalized = normalize(node.textContent);\n    return ${comparison};\n  };\n  const clickableSelectors = "a,button,[role=\\"button\\"],[role=\\"link\\"],[onclick]";\n  const visitDocument = (doc, seen = new Set()) => {\n    if (!doc || seen.has(doc)) return null;\n    seen.add(doc);\n    const candidates = Array.from(doc.querySelectorAll("*"));\n    const target = candidates.find((node) => matches(node));\n    if (target) return target;\n    for (const frame of Array.from(doc.querySelectorAll("iframe"))) {\n      try {\n        const nested = visitDocument(frame.contentDocument, seen);\n        if (nested) return nested;\n      } catch {\n        // Ignore cross-origin frames.\n      }\n    }\n    return null;\n  };\n  const activate = (node) => {\n    if (!node) return "not-found";\n    const clickable = node.closest(clickableSelectors) || node;\n    if (typeof clickable.scrollIntoView === "function") {\n      clickable.scrollIntoView({ block: "center", inline: "center" });\n    }\n    const rawHref = clickable.getAttribute("href") || clickable.getAttribute("data-href") || clickable.getAttribute("data-url") || clickable.dataset?.href || clickable.dataset?.url;\n    if (rawHref && !rawHref.startsWith("javascript:")) {\n      const view = clickable.ownerDocument.defaultView;\n      if (view) {\n        view.location.href = new URL(rawHref, clickable.ownerDocument.baseURI).href;\n        return "navigated";\n      }\n    }\n    const view = clickable.ownerDocument.defaultView;\n    if (view) {\n      const eventInit = { bubbles: true, cancelable: true, view };\n      clickable.dispatchEvent(new view.MouseEvent("mousedown", eventInit));\n      clickable.dispatchEvent(new view.MouseEvent("mouseup", eventInit));\n      clickable.dispatchEvent(new view.MouseEvent("click", eventInit));\n    }\n    if (typeof clickable.click === "function") {\n      clickable.click();\n    }\n    return "clicked";\n  };\n  const target = visitDocument(document);\n  return activate(target);\n})();`;
 }
 
 export async function agent(config: Config, args: string[], options: { optional?: boolean } = {}) {

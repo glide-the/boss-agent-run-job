@@ -1,7 +1,8 @@
 export type Locator =
   | { method: "find-text"; value: string; exact?: boolean; description?: string }
   | { method: "css"; value: string; description?: string }
-  | { method: "role"; role: string; name: string; description?: string };
+  | { method: "role"; role: string; name: string; description?: string }
+  | { method: "dom-text"; value: string; exact?: boolean; description?: string };
 
 export type AgentBrowserConfig = {
   extensions: string[];
@@ -50,6 +51,8 @@ export type TraceEvent = {
 
 export type JobRecord = {
   target_id: string;
+  leftIndex?: number;
+  targetProvenance?: "discovered" | "fallback" | "config-only";
   job_id: string;
   url: string;
   collectedAt: string;
@@ -58,7 +61,11 @@ export type JobRecord = {
   location?: string;
   experience?: string;
   education?: string;
+  description?: string;
+  skills?: string[];
   company?: string;
+  company_scale?: string;
+  industry?: string;
   recruiter?: string;
   rawTextFile: string;
   snapshotFile?: string;
@@ -67,11 +74,14 @@ export type JobRecord = {
 
 export type ChatListEntry = {
   index: number;
+  leftIndex: number;
   text: string;
 };
 
 export type ChatRecord = {
   target_id: string;
+  leftIndex?: number;
+  targetProvenance?: "discovered" | "fallback" | "config-only";
   contactLocator?: Locator;
   collectedAt: string;
   rawTextFile: string;
@@ -81,6 +91,8 @@ export type ChatRecord = {
 export type RuntimeTraceTarget = {
   target_id: string;
   description?: string;
+  leftIndex?: number;
+  targetProvenance?: "discovered" | "fallback" | "config-only";
   conversationLocator: Locator;
   jobEntryLocators: Locator[];
 };

@@ -1,84 +1,88 @@
-# Stage Plan: SUO-150 BOSS Trace Per-Contact Chain Backend + Docs + Validation
+# Stage Plan: SUO-150 BOSS Trace Per-Contact Chain (Execution Baseline, Left-Panel Contract)
 
 Stage ID: `STAGE-SUO-150-BOSS-TRACE-PER-CONTACT-CHAIN`
 
 Stage readiness verdict: `execute-ready`
 
-Execution readiness check summary:
-
-- 输入完整且一致（设计稿、任务包、Issue 清单、任务提示词文件齐备）。
-- 上下文中已明确 `BTR-01`、`BTR-02`、`BTR-03` 的边界与交付顺序。
-- 当前判定：`execute-ready`。
-
 ## 关联设计稿
 
-- `docs/design/design_001_boss_trace_chat_to_job_detail.md`
-- `docs/issue/ISSUES_boss-trace-chat-to-job-detail.md`
+- [design_001_boss_trace_chat_to_job_detail.md](/Users/dmeck/project/boss-agent/docs/design/design_001_boss_trace_chat_to_job_detail.md)
 
 ## 任务输入来源说明
 
-- 任务包：`docs/task/task_01_backend_boss_trace_execution_output_contract.md`（BTR-01）
-- 任务提示词：`docs/task/TASK-REQUIREMENT-FORMAT.md`
-- 兼容上下文：`docs/task/SUO-139-selector-inspection-multi-job-fix.md`、`docs/task/SUO-133-boss-trace-flashing-fix.md`
-- 运行与文档上下文：`README.md`、`docs/boss-agent-browser-trace.md`
-- 关联 Stage 参考：`docs/stage/stage_suo_139_selector_inspection_multi_job_fix.md`
+- [SUO-166 continuation summary]（本次 issue 重排上下文）
+- [issue 列表](/Users/dmeck/project/boss-agent/docs/issue/ISSUES_boss-trace-chat-to-job-detail.md)
+- [task 任务包](/Users/dmeck/project/boss-agent/docs/task/task_01_backend_boss_trace_execution_output_contract.md)
+- [stage 现有历史](/Users/dmeck/project/boss-agent/docs/stage/stage_suo_162_boss_trace_left_panel_coverage_contract.md), (/Users/dmeck/project/boss-agent/docs/stage/stage_suo_159_boss_trace_left_panel_recovery.md)
 
-Input sufficiency decision:
+本计划更新目标：将现有 per-contact chain 执行门禁改为“左侧聊天列表全量逐对话覆盖 + single-session normal + current-session bound job + debug-only inspect”，并保持 stage 与 exec 边界。
 
-- 所需输入文件均可读。
-- 设计与 task/issue 输入支持将 `BTR-01`、`BTR-02`、`BTR-03` 在 stage 中分立追踪。
+输入完整性判定:
 
-## 阶段任务表
+- 设计稿与 issue/task 输入已可读且明确指向左侧列表为 normal-flow source-of-truth。
+- `leftIndex`、`targetProvenance`、`target_id` 和 `job_id` 派生口径已在输入中明示。
+- 执行边界清晰：stage 不直接产出 exec 结果。
 
-| 阶段 | 任务 | 产出 | 依赖 | 风险 |
-| --- | --- | --- | --- | --- |
-| STAGE-0 Readiness Gate | 串行: 确认任务来源、边界、输入齐备与执行门禁 | `execute-ready` 判定与三 issue 对齐结论 | 设计稿、任务包、Issue 清单、TASK-REQUIREMENT-FORMAT | 输入误读导致 stage 作用域偏移 |
-| STAGE-1 BTR-01 命令路径与 launch 基线 | 串行: 完成 normal / dry / inspect 路径命令入口盘点，确认 base args 唯一入口 | `agent-browser` 基线清单与 required args 合规规则 | STAGE-0 | 漏审计入口导致参数不一致 |
-| STAGE-2 BTR-01 逐联系人目标收敛 | 串行: 落实 `traceTargets` 优先、兼容回退、`target_id` 与任务顺序定义，并限制为当前会话绑定入口 | `target` 目标集合、`target_id` 规则、单目标单 job 输入契约 | STAGE-1 | 目标规约歧义导致 `chats/jobs` 可追溯性丢失 |
-| STAGE-3 BTR-01 单会话主链路 | 串行: 打造一次 open 的 normal flow（chat list -> target -> bound job -> return） | 单会话采集主链路定义（不重开 chat） | STAGE-1, STAGE-2 | 回归到重复 open chat 的旧路径 |
-| STAGE-4 BTR-01 有界 job 与恢复语义 | 串行: 落地首个当前会话绑定 job 选择、失败跳过、外部 blocker 终止规则，并拒收推荐/未知岗位 | 执行序列规则与 `trace-events` 失败事件标准 | STAGE-3 | 无条件 abort 误杀非外部失败 |
-| STAGE-5 BTR-01 输出契约与数据身份 | 串行: 锁定 `target_id`、`job_id`、`jobs.json/chats.json` 字段/去重与过滤边界，且只接受当前会话绑定首个入口 | 可追溯的 output 契约与噪声过滤证据口径 | STAGE-3 | URL 解析或过滤错位影响验收 |
-| STAGE-6 BTR-01 代码边界重构（backend） | 并行: 拆分 orchestration/commands/output/parser 边界，维持统一调用入口 | `src/trace-boss.ts` + 拆分边界提案（`targets.ts`/`commands.ts`/`output.ts`/`parser.ts`） | STAGE-1, STAGE-3 | 大拆分引入行为漏改 |
-| STAGE-7 BTR-02 文档同步 | 并行: 更新 `README.md` 与 `docs/boss-agent-browser-trace.md` 到逐联系人链路契约 | 文档表述与 evidence 口径与 design/task 一致；旧假设标为 superseded，且推荐/未知岗位被显式拒收 | STAGE-2, STAGE-3, STAGE-5 | 文档与实现脱节 |
-| STAGE-8 BTR-03 联合验收与证据收口 | 串行: 验证 BTR-01+ BTR-02 收敛后形成可执行 handoff 信号 | `bun run check`、`bun run trace:dry`、`bun run trace`、可选 `--inspect-selectors` 证据路径 | STAGE-3, STAGE-4, STAGE-5, STAGE-6, STAGE-7 | 外部 blocker 导致 live 证据无法完成 |
-| STAGE-9 Exec Handoff | 串行: 对下游 `ExecTaskAgent` 输出准入条件并提交 handoff | `execute-ready` 与验收门禁清单 | STAGE-8 | 准入条件表达不清导致重复返工 |
+## 职责边界（Issue / Task / Stage / Exec）
+
+- `Issue`：定义目标、优先级、依赖与交付条件（如 BTR-01/BTR-02/BTR-03）。
+- `Task`：产出 backend task 包（`docs/task/...`）和实现接口约束。
+- `Stage`（本文件）：将 task 收敛为可执行顺序、并行关系、门禁与交付清单。
+- `Exec`：承担代码落地后的 fresh 运行与证据验证（不由 Stage 直接执行）。
 
 ## 当前进度
 
 | 阶段 | 任务 | 状态 |
 | --- | --- | --- |
-| STAGE-0 Readiness Gate | 确认 `SUO-150` 分工边界、输入齐备与 issue 拆分对齐 | 完成: 输入充分，判定 `execute-ready` |
-| STAGE-1 BTR-01 命令路径与 launch 基线 | 识别并统一 `agent-browser` command/log 基线入口 | 未开始: downstream execute |
-| STAGE-2 BTR-01 逐联系人目标收敛 | 完成 `traceTargets`/`conversationEntryLocators` 合并规则与 `target_id` 规则，并限定当前会话绑定首个入口 | 未开始: downstream execute |
-| STAGE-3 BTR-01 单会话主链路 | 确保 normal flow 单 open 单会话且仅跟随当前会话绑定首个岗位 | 未开始: downstream execute |
-| STAGE-4 BTR-01 有界 job 与恢复语义 | 落地边界与 continue-vs-abort 行为，拒收推荐/未知岗位 | 未开始: downstream execute |
-| STAGE-5 BTR-01 输出契约与数据身份 | 落地 `target_id`/`job_id` 与过滤规则执行标准，并拒收 `job_sug_*` | 未开始: downstream execute |
-| STAGE-6 BTR-01 代码边界重构（backend） | 输出 backend helper 边界拆分方案与迁移清单 | 未开始: downstream execute |
-| STAGE-7 BTR-02 文档同步 | 在文档中同步逐联系人链路与 supersede 注记 | 未开始: downstream execute |
-| STAGE-8 BTR-03 联合验收与证据收口 | 完成 check/trace 证据与 evidence 边界 | 未开始: downstream execute |
-| STAGE-9 Exec Handoff | 向 ExecTaskAgent 发起可执行 handoff 与确认项 | 未开始: downstream execute |
+| STAGE-0 Execute Readiness and Lock | 输入一致性与范围冻结 | 完成 |
+| STAGE-1 Chat-List Discovery as Source-of-Truth | 左侧会话列表作为覆盖源 | 未开始 |
+| STAGE-2 Target Merge and Provenance Freeze | `traceTargets` 仅作覆盖，不再收窄目标 | 未开始 |
+| STAGE-3 Single-Session Normal Trace Sequencing | one-open normal 主链路编排 | 未开始 |
+| STAGE-4 Current-Session Bound Job Rule | 每目标仅首个当前会话绑定岗位 | 未开始 |
+| STAGE-5 Inspect Isolation Gate | `--inspect-selectors` debug-only gate | 未开始 |
+| STAGE-6 Evidence Identity Contract | `target_id/leftIndex/targetProvenance/job_id` 写入 artifact | 未开始 |
+| STAGE-7 Backend Boundary | orchestration/command/parser/output 分层约束 | 未开始 |
+| STAGE-8 Docs & Superseded Hygiene | 与 BTR-02 同步 superseded 及边界 | 未开始 |
+| STAGE-9 Validation & Exec Handoff | fresh evidence 与执行门禁复核 | 未开始 |
 
-## STAGE-0 Readiness Gate
+## 阶段任务表
 
-Parallelism: 串行。
+| 阶段 | 任务 | 产出 | 依赖 | 风险 |
+| --- | --- | --- | --- | --- |
+| STAGE-0 Execute Readiness and Lock | 串行：锁定 SUO-166 重排目标、确认 all-left-panel 合同可执行，确认只写 `docs/stage/` | execute-ready 与门禁声明 | design/issue/task 输入 | 输入版本漂移导致旧假设复燃 |
+| STAGE-1 Chat-List Discovery as Source-of-Truth | 串行：以 `COLLECT_CHAT_LIST` 作为 normal target baseline（bounded by scroll config） | `left-panel` 覆盖序列（按发现顺序） | STAGE-0 | 左侧滚动列表漂移、虚拟列表重排 |
+| STAGE-2 Target Merge and Provenance Freeze | 串行：按 locator 去重与顺序合并 `traceTargets`/`conversationEntryLocators`（compat overlay） | `resolvedTargets`（`target_id`、`leftIndex`、`targetProvenance`） | STAGE-1 | 兼容输入被误用成收窄条件 |
+| STAGE-3 Single-Session Normal Trace Sequencing | 串行：规划 normal flow：open chat 一次 + per-conversation sequential chain + in-session return/back + no repeated open | 单会话主链路执行规范与失败后续策略 | STAGE-2 | 重复 open 导致闪烁回归 |
+| STAGE-4 Current-Session Bound Job Rule | 串行：每个 target 只接受当前会话绑定的首个有效岗位；失败则 `job-not-collected` 并继续 | 单目标单 job 规则与 continue-vs-abort 规则 | STAGE-3 | 非阻塞失败被误 abort 全局 |
+| STAGE-5 Inspect Isolation Gate | 串行：`--inspect-selectors` 不参与 normal completion，且使用同一 resolved target cardinality | debug-only 证据边界与证据归类规则 | STAGE-3 | inspect 被混淆为正常完成证据 |
+| STAGE-6 Evidence Identity Contract | 并行：锁定 chats/jobs/events 的身份字段与 URL-derived `job_id` 语义 | audit-ready artifact schema 和过滤边界 | STAGE-2, STAGE-4 | URL 解析失败导致误采样 |
+| STAGE-7 Backend Boundary | 并行：明确 parser/filter/output 不再集中在 `src/trace-boss.ts`，命令构建分层可见 | backend 接口边界清单 | STAGE-0, STAGE-3 | 范围过大导致重构回归 |
+| STAGE-8 Docs & Superseded Hygiene | 并行：将 stage/issue/task/README/指南对齐到 all-left-panel 与 per-conversation 合同 | `superseded` 清单与一致性核验点 | STAGE-3/6/7 | 文档超承诺（快于验证） |
+| STAGE-9 Validation & Exec Handoff | 串行：保持 execute readiness gate，禁止跳过验证并生成 handoff 条件 | 执行前置条件、阻塞路径、验收点 | STAGE-3, STAGE-4, STAGE-5, STAGE-6, STAGE-8 | 外部 blocker（登录/CAPTCHA/风控/会话丢失） |
+
+## STAGE-0 Execute Readiness and Lock
+
+并行/串行标记: 串行。
 
 准入条件:
 
-- `docs/design/design_001_boss_trace_chat_to_job_detail.md` 可读。
-- `docs/task/task_01_backend_boss_trace_execution_output_contract.md` 可读。
-- `docs/issue/ISSUES_boss-trace-chat-to-job-detail.md` 可读，明确 `BTR-01/BTR-02/BTR-03`。
-- `docs/task/TASK-REQUIREMENT-FORMAT.md` 可用。
+- 设计稿、issue 清单、任务包输入已读取且版本一致。
+- `docs/issue` 与 `task` 中左侧逐对话覆盖规则为当前 source-of-truth。
+- 输出范围仅允许 `docs/stage/`。
 
 阶段产出 checklist:
 
-- [x] 输入齐备。
-- [x] `execute-ready` 结论写入。
-- [x] `BTR-01/BTR-02/BTR-03` 在 stage 范围中显式区分。
-- [x] 执行边界（不混入 task/exec、仅 stage 输出）确认。
+- [x] 已确认 `SUO-166` 重排目标：以 left-panel discovery 作为覆盖源。
+- [x] 已确认 `STAGE` 仍保持 execute readiness gate，不跳转 exec。
+- [x] 已明确下游交付顺序：BTR-01/02/03（与 exec 依赖分离）。
 
-## STAGE-1 BTR-01 命令路径与 launch 基线
+Exit rule:
 
-Parallelism: serial gate.
+- `STAGE-0` 不可跳过；未满足则 issue 保持 blocked 并要求补齐输入。
+
+## STAGE-1 Chat-List Discovery as Source-of-Truth
+
+并行/串行标记: 串行。
 
 准入条件:
 
@@ -86,196 +90,166 @@ Parallelism: serial gate.
 
 阶段产出 checklist:
 
-- [ ] 列举 normal、`trace:dry`、`--inspect-selectors` 的 `agent-browser` 调度路径。
-- [ ] 识别单入口 `buildAgentBrowserBaseArgs` 或等价统一出口。
-- [ ] 证明下列参数全路径一致存在：
-  - `--extension /Users/dmeck/agent-brower/capsolver-extension`
-  - `--extension /Users/dmeck/agent-brower/stealth-extension`
-  - `--state /Users/dmeck/agent-brower/my-auth.json`
-  - `--headed`
-- [ ] 风险：旧模式中重复 open chat 的路径已标记待替代。
+- [ ] 明确 `open https://www.zhipin.com/web/geek/chat` 仅用于 normal 的单次入口。
+- [ ] 明确 left-panel collection 的顺序、去重键与 `leftIndex` 规则。
+- [ ] 明确 `chat-list` 失效时 `fallback` 兼容路径的触发条件。
 
-## STAGE-2 BTR-01 逐联系人目标收敛
+## STAGE-2 Target Merge and Provenance Freeze
 
-Parallelism: 可以在 STAGE-1 之后并行推进实现细化。
+并行/串行标记: 串行。
 
 准入条件:
 
-- STAGE-1 已确认 normal flow 入口。
+- STAGE-1 的覆盖序列已定义。
 
 阶段产出 checklist:
 
-- [ ] `traceTargets` 优先级先于 `conversationEntryLocators`。
-- [ ] 兼容回退去重，不重复同一联系人。
-- [ ] `target_id` 固定：`traceTargets[*].id` 优先，缺失用 `target-{index}`。
-- [ ] 每目标岗位列表只接受当前会话绑定的首个有效入口；`maxJobs` / `maxJobsPerTarget` 仅作历史兼容字段。
-- [ ] 失败记录保留 `target_id` 维度。
+- [ ] 明确 `traceTargets` 与 `conversationEntryLocators` 仅为 compatibility/override，不可替代或收窄 discovered target set。
+- [ ] 标注 `targetProvenance`：`discovered` / `fallback` / `config-only`。
+- [ ] 标注 `config-only` 未命中事件和告警（`trace-target-not-found`）。
 
-## STAGE-3 BTR-01 单会话主链路
+## STAGE-3 Single-Session Normal Trace Sequencing
 
-Parallelism: 串行（决定主执行模型）。
+并行/串行标记: 串行。
 
 准入条件:
 
-- STAGE-1 与 STAGE-2 规则成立。
+- STAGE-2 完成。
 
 阶段产出 checklist:
 
-- [ ] normal `bun run trace` 正常路径只有一次 `open https://www.zhipin.com/web/geek/chat`。
-- [ ] `chat list -> 目标选择 -> 聊天读取 -> 职位尝试 -> return-to-chat -> 下一目标` 在同 session 内完成。
-- [ ] `back` 为首选返回策略，不借助 open 重返主聊天页。
-- [ ] trace 事件可支持会话级重放。
+- [ ] normal flow 轨迹：`COLLECT_CHAT_LIST -> BUILD_TARGET_SET -> PER_TARGET(contact/chat/job/return)`。
+- [ ] 每目标执行在同一 browser/session：`select contact -> collect chat -> collect first current-bound job -> return back`。
+- [ ] 禁止目标间重复 open chat。
+- [ ] 只在 external blocker 时 abort（登录/CAPTCHA/风控/站点不可用）。
 
-## STAGE-4 BTR-01 有界 job 与恢复语义
+## STAGE-4 Current-Session Bound Job Rule
 
-Parallelism: 并行执行项较少，收口时串行。
+并行/串行标记: 串行。
 
 准入条件:
 
-- STAGE-3 的会话模型通过基础验证。
+- STAGE-3 的 session loop 可执行。
 
 阶段产出 checklist:
 
-- [ ] 每目标 job 按配置顺序尝试，超过上限停止。
-- [ ] 目标/job 失败记录 `job-not-collected` 或等价事件。
-- [ ] 单目标失败不应中断全局，除非外部 blocker。
-- [ ] 外部 blocker 仅限：登录跳转、CAPTCHA/风控、会话丢失、站点不可用。
+- [ ] 每 `target_id` 仅接受第一条可绑定当前会话的 `jobEntryLocator`。
+- [ ] 明确过滤：`job_sug_*`、`/recommend/`、未知岗位不形成 normal 成功证据。
+- [ ] 记录 `job-not-collected` 并继续下一目标，不得无条件终止。
 
-## STAGE-5 BTR-01 输出契约与数据身份
+## STAGE-5 Inspect Isolation Gate
 
-Parallelism: 可与 STAGE-3 并行做静态校验设计，但最终与 STAGE-3 收敛。
+并行/串行标记: 串行。
 
 准入条件:
 
-- STAGE-3 有效产出 URL/context。
+- STAGE-3 的 session 生命周期已冻结。
 
 阶段产出 checklist:
 
-- [ ] `job_id` 仅来自 URL `/job_detail/<job_id>.html`。
-- [ ] `output/chats.json`/`jobs.json` 都携带 `target_id`。
-- [ ] `jobs.json` 写入 `job_id`、`url`、`collectedAt`、`rawTextFile`、`snapshotFile`。
-- [ ] `(target_id, job_id)` 去重并记录跳过。
-- [ ] 过滤区块（相似职位、热门职位、推荐公司、公司品牌信息等）应用于 raw/snapshot 与结构化结果。
+- [ ] `--inspect-selectors` 为显式 opt-in 且 debug-only。
+- [ ] inspect 使用 normal 已解析目标集，cardinality 不回退到单 target。
+- [ ] inspect 证据不得计入 normal flow 完成条件。
 
-## STAGE-6 BTR-01 代码边界重构（backend）
+## STAGE-6 Evidence Identity Contract
 
-Parallelism: 并行。
+并行/串行标记: 并行后收敛。
 
 准入条件:
 
-- STAGE-1 已确认单入口。
+- STAGE-2 与 STAGE-4 语义可映射 artifact。
 
 阶段产出 checklist:
 
-- [ ] 保持单入口执行入口。
-- [ ] 按优先边界拆分命令/目标解析/输出/解析模块。
-- [ ] 下游实现说明不再把 orchestration、command building、output writing、parser/filter 继续放在单文件。
+- [ ] `output/chats.json` 和 `output/jobs.json` 包含 `target_id`、`leftIndex`（可发现时）、`targetProvenance`。
+- [ ] `output/jobs.json` 的 `job_id` 仅来自当前 URL `/job_detail/<id>.html`。
+- [ ] 记录 `(target_id, job_id)` 去重与 `job-duplicate-skipped`。
+- [ ] 过滤 recommendation / 热门 / 相似职位等噪声区块。
 
-## STAGE-7 BTR-02 文档同步
+## STAGE-7 Backend Boundary
 
-Parallelism: 并行，最终依赖 BTR-01 核心语义稳定。
+并行/串行标记: 并行。
 
 准入条件:
 
-- BTR-01 的目标/单会话/输出边界可明确。
+- STAGE-3 已给出 session 与目标序列执行线。
 
 阶段产出 checklist:
 
-- [ ] 更新 `README.md` 与 `docs/boss-agent-browser-trace.md` 对 `target_id`、`job_id`、单会话单-open、单目标单 job 的正向说明，并显式拒收推荐/未知岗位。
-- [ ] 明确 `target/job` 失败与继续逻辑。
-- [ ] 标记旧的“单会话多目标”旧假设为 superseded。
-- [ ] 确保 debug-only 检测和 normal flow 的证据边界在文档中一致。
+- [ ] `src/trace-boss.ts` 限制为入口调度；目标解析、命令构建、parser、output 具备明确边界。
+- [ ] `agent-browser` launch 命令参数来自统一构建点（required args 全链路一致）。
 
-## STAGE-8 BTR-03 联合验收与证据收口
+## STAGE-8 Docs & Superseded Hygiene
 
-Parallelism: 串行收口。
+并行/串行标记: 并行。
 
 准入条件:
 
-- STAGE-3~7 完成。
+- STAGE-3/6/7 约束稳定。
 
 阶段产出 checklist:
 
-- [ ] 运行并记录 `bun run check`。
-- [ ] 运行 `bun run trace:dry`，验证命令路径与 launch args。
-- [ ] 运行 `bun run trace`，验证单 open + 单会话 + `target_id` + `job_id`，且每个 target 只记录 1 条成功 job 并拒收推荐/未知岗位。
-- [ ] 如必要，运行 `bun run trace -- --inspect-selectors` 并确认仅为 debug evidence。
-- [ ] 若被登录/风控/站点阻塞，记录精确 stop-point 与最小命令生成证明。
-- [ ] 产出 `BTR-03` 手册化验收结论（支持 BTR-01/02 的收口）。
+- [ ] 通过 BTR-02 同步：`leftIndex`、`targetProvenance`、`target_id`、`job_id`、single-session、single-job、inspect debug-only。
+- [ ] 明确旧“单 target / limited target”叙事标记为 `superseded`。
 
-## STAGE-9 Exec Handoff
+## STAGE-9 Validation & Exec Handoff
 
-Parallelism: 串行。
+并行/串行标记: 串行。
 
 准入条件:
 
-- STAGE-8 达标。
+- STAGE-4 到 STAGE-8 收敛完成。
 
 阶段产出 checklist:
 
-- [ ] 对 `ExecTaskAgent` 明确 handoff：需先完成 STAGE-1~8。
-- [ ] 复核执行 readiness：无需额外输入补齐，允许进入 `Execution`。
-- [ ] 提交 issue 评论：给出 stage 文档路径、三阶段拆分、当前进度、`BTR-03` 收口要求。
+- [ ] 保留 execute readiness 复核，明确执行前置和阻塞 gate。
+- [ ] 输出 `bun run check` / `bun run trace:dry` / `bun run trace` / `bun run trace -- --inspect-selectors` 的执行条件与期望证据。
+- [ ] 证据要求：single-open / single-session / one-job-per-target / same target cardinality in inspect / 左侧覆盖链可追溯。
+- [ ] `in_progress` -> `BTR-01/02/03` handoff 路径清晰，未出现 exec 混淆。
 
 ## 关键路径
 
-1. STAGE-0 Readiness Gate
-2. STAGE-1 BTR-01 命令路径与 launch 基线
-3. STAGE-3 BTR-01 单会话主链路
-4. STAGE-4 BTR-01 有界 job 与恢复语义
-5. STAGE-5 BTR-01 输出契约与数据身份
-6. STAGE-7 BTR-02 文档同步
-7. STAGE-8 BTR-03 联合验收与证据收口
-8. STAGE-9 Exec Handoff
-
-并行窗口:
-
-- STAGE-2、STAGE-6、STAGE-7 可在 STAGE-1 或 STAGE-3 后并行。
-- STAGE-8 依赖 STAGE-3~7。
+1. STAGE-0 Execute Readiness and Lock
+2. STAGE-1 Chat-List Discovery as Source-of-Truth
+3. STAGE-2 Target Merge and Provenance Freeze
+4. STAGE-3 Single-Session Normal Trace Sequencing
+5. STAGE-4 Current-Session Bound Job Rule
+6. STAGE-6 Evidence Identity Contract
+7. STAGE-5 Inspect Isolation Gate
+8. STAGE-9 Validation & Exec Handoff
 
 ## 风险与缓冲策略
 
-- 代码与文档同步节奏不同步：采用 STAGE-7 独立阶段并在 STAGE-9 handoff 强制核对。
-- 目标漂移导致点击失败：保留失败快照和事件，避免因失败重开 chat。
-- 虚拟滚动导致列表漏抓：保留 `trace` 与滚动预算，避免按假设固定数量。
-- 外部阻塞（登录/CAPTCHA/风控）：仅做 command-generation 与 blocker 精确记录，不得用旧证据。
-- 旧假设误回归：在 STAGE-7 和 STAGE-9 明确 superseded 迁移边界。
+- 左侧会话列表漂移：保留 `chat-list` 证据，按 locator-signature 去重，`leftIndex` 在可发现范围内固定。
+- 重复 open 风险：在 STAGE-3 置顶检查项，“目标间禁止再次 open chat”。
+- inspect 混用风险：STAGE-5 强制 debug-only 与 cardinality 一致检查。
+- 外部阻塞风险：登录/CAPTCHA/风险控制/会话丢失导致无法完成 live run 时，必须记录 stop-point 与最小命令验证路径。
 
 ## Mermaid DAG
 
 ```mermaid
 flowchart TD
-    DESIGN["Design: docs/design/design_001_boss_trace_chat_to_job_detail.md"] --> S0["STAGE-0 Readiness Gate"]
-    ISSUE["Issue list: docs/issue/ISSUES_boss-trace-chat-to-job-detail.md"] --> S0
-    TASK["Task: docs/task/task_01_backend_boss_trace_execution_output_contract.md"] --> S0
-    FORM["Template: docs/task/TASK-REQUIREMENT-FORMAT.md"] --> S0
-    S0 --> S1["STAGE-1 BTR-01 命令路径与 launch 基线"]
-    S1 --> S2["STAGE-2 BTR-01 逐联系人目标收敛"]
-    S2 --> S3["STAGE-3 BTR-01 单会话主链路"]
-    S3 --> S4["STAGE-4 BTR-01 有界 job 与恢复语义"]
-    S4 --> S5["STAGE-5 BTR-01 输出契约与数据身份"]
-    S3 --> S6["STAGE-6 BTR-01 代码边界重构"]
-    S5 --> S7["STAGE-7 BTR-02 文档同步"]
-    S6 --> S7
-    S3 --> S8["STAGE-8 BTR-03 联合验收与证据收口"]
-    S4 --> S8
-    S5 --> S8
-    S7 --> S8
-    S8 --> S9["STAGE-9 Exec Handoff"]
+    DESIGN["Design: docs/design/design_001_boss_trace_chat_to_job_detail.md"] --> R0["STAGE-0 Execute Readiness and Lock"]
+    ISSUE["Issue: docs/issue/ISSUES_boss-trace-chat-to-job-detail.md"] --> R0
+    TASK["Task: docs/task/task_01_backend_boss_trace_execution_output_contract.md"] --> R0
+    R0 --> R1["STAGE-1 Chat-List Discovery"]
+    R1 --> R2["STAGE-2 Target Merge/Provenance"]
+    R2 --> R3["STAGE-3 Single-Session Sequencing"]
+    R3 --> R4["STAGE-4 Current-Session Bound Job"]
+    R3 --> R5["STAGE-5 Inspect Isolation"]
+    R4 --> R6["STAGE-6 Evidence Identity"]
+    R3 --> R7["STAGE-7 Backend Boundary"]
+    R2 --> R8["STAGE-8 Docs & Superseded"]
+    R4 --> R9["STAGE-9 Validation & Handoff"]
+    R5 --> R9
+    R6 --> R9
+    R7 --> R9
+    R8 --> R9
 ```
 
 ## 完成信号说明
 
-Stage 完成（进入下游执行）条件:
-
-- `docs/stage/stage_suo_150_boss_trace_per_contact_chain_backend.md` 已确认写入。
-- `SUO-150` 内部注释/评论给出：
-  - execute-ready 结论。
-  - BTR-01/BTR-02/BTR-03 分解后的 stage 结构。
-  - 当前进度（S0 已完成，S1-S9 下游待执行）。
-  - 进入 `ExecTaskAgent` 的准入条件（见 STAGE-9）。
-
-Handoff 目标路径:
-
-- 下游由 `ExecTaskAgent`/实现方按 STAGE-1~8 顺序交付并按 STAGE-9 返回。
-- 不在本 stage 文档内执行代码/exec 验证，仅提供可执行执行切分与验收边界。
+- `docs/stage/stage_suo_150_boss_trace_per_contact_chain_backend.md` 已更新为 SUO-166 目标：left-panel 全量逐对话发现、single-session normal、current-session bound job、debug-only inspect。
+- `execute-readiness` 门禁仍保留，且列为 STAGE-0 与 STAGE-9 的阻断条件。
+- 文档职责边界已明确：`issue/task/stage/exec` 仅在其职责域内。
+- 下游 handoff 指向 BTR-01（实现）→ BTR-02（文档）→ BTR-03（验证/执行收口）。
