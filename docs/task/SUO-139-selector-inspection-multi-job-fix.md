@@ -1,5 +1,7 @@
 # SUO-140 Task Package: SUO-139 Selector Inspection, Single-Session, and Multi-Job Collection
 
+> Superseded by SUO-153 current-session binding correction. Historical context only; recommendation/unknown job URLs are not valid normal evidence.
+
 ## 1. 任务标题
 
 为 `SUO-139` 产出 BOSS trace 后端任务包：显式 selector inspection、正常路径单会话采集、配置化多岗位采集。

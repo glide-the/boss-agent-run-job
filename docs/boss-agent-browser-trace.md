@@ -18,7 +18,7 @@
 | 1 | chat 首页 | 打开 URL | 整页 | `agent-browser open <startUrl>` | `wait --load networkidle` | 如果跳登录页，人工登录后重跑 |
 | 2 | chat 对话页 | 滚动收集完整会话列表 | 会话列表 | `scroll down <px>` + `snapshot -i -u -c` | 每次滚动后短等待 | 滚动结束后在同一会话中滚回顶部 |
 | 3 | chat 对话页 | 点击联系人 | `traceTargets[*].conversationLocator` 或兼容的 `conversationEntryLocators` | `find text "<联系人>" click` 或配置的 CSS/role locator | `wait --load networkidle` | 保存 snapshot 后人工标注 selector |
-| 4 | chat 对话页 | 点击岗位入口 | 当前目标内有限的 `jobEntryLocators` | `find text "职位详情" click`、`find text "查看职位" click`、`click "a[href*='/job_detail/']"` | `wait --url "**/job_detail/**"` 或 `wait --load networkidle` | 换用 CSS selector 或 role 定位；同一目标最多 `maxJobs` / `maxJobsPerTarget` 个 |
+| 4 | chat 对话页 | 点击岗位入口 | 当前目标内有限的、与当前会话绑定的首个有效 `jobEntryLocators` | `find text "职位详情" click`、`find text "查看职位" click`、`click "a[href*='/job_detail/']"` | `wait --url "**/job_detail/**"` 或 `wait --load networkidle` | 只接受当前会话里真实出现的首个有效岗位入口；正常模式每个 target 只记录 1 个 job，推荐页 / `job_sug_*` / `/recommend/` 不算有效岗位入口 |
 | 5 | 岗位详情页 | 保存详情页文本 | 岗位详情主内容区 | `read` | `wait --load networkidle` | 先截图，再从 snapshot 定位主区域 |
 | 6 | 岗位详情页 | 截图留证 | 当前视口 | `screenshot output/screenshots/job-N.png` | 无 | 关闭截图配置 |
 | 7 | 岗位详情页 | 回到 chat | 当前浏览器历史 | `back` | `wait --load networkidle` | 多岗位/多联系人之间不在正常流程中重新 `open <startUrl>` |
@@ -86,8 +86,9 @@
 - `@eN` ref 每次 snapshot 都会变化，脚本不依赖固定 ref。
 - 页面动态类名可能变化，CSS selector 需要根据 snapshot 调整。
 - 正常流程只允许一次 `open https://www.zhipin.com/web/geek/chat`；selector 探测只能通过 `--inspect-selectors` 显式开启，且必须复用当前 session。
-- 多岗位采集只遍历 `traceTargets` / locator 配置中的有限目标，不做无边界站内爬取；单个目标的停止条件是 `maxJobs` 或全局 `maxJobsPerTarget`。
+- 正常流程只遍历 `traceTargets` / locator 配置中的有限目标，不做无边界站内爬取；单个目标只接受 1 个当前会话绑定 job，`maxJobs` 或全局 `maxJobsPerTarget` 仅作为历史兼容字段。
 - 最终岗位文本会在写入 raw/snapshot/job JSON 前截断或过滤相似职位、热门职位、推荐公司、其他公司品牌信息等非当前岗位区域。
+- `job_sug_*`、`/recommend/` 和其他推荐/发现链路的 URL 会被拒收，不算正常岗位入口。
 - 建议小批量低频运行，避免对网站造成压力。
 
 ## 调参建议

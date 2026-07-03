@@ -47,12 +47,14 @@
   - 正常模式只允许一次 `open https://www.zhipin.com/web/geek/chat`
   - `--inspect-selectors` 仅用于 debug 探查，不作为正常完成证据
   - `job_id` 必须从 `/job_detail/<job_id>.html` URL 解析
-  - 目标链路必须受 `traceTargets`、`maxJobs` 与 `maxJobsPerTarget` 约束
+  - `job_sug_*`、`/recommend/` 和其他推荐/发现 URL 不是有效岗位证据，即使路径看起来像 `job_detail` 也要拒收
+  - 目标链路在 normal flow 中只接受每个 target 的首个当前会话绑定 job；`traceTargets`、`maxJobs` 与 `maxJobsPerTarget` 仅保留为历史兼容字段，不驱动同联系人多 job 扩张
   - 仅对外部 blocker 采取 abort，其余可恢复错误应继续到下一个目标或 job
 - 补充说明：
   - `DEC-006` 和 `DEC-007` 已把 per-contact chain 与 bounded target scope 设为 active contract。
   - `BTR-02` 与 `BTR-03` 是面向下游 task / stage / exec 的文档化收口，不扩展实现范围。
   - `StagePlanner` 会在后续阶段使用本清单的依赖关系做 DAG 分析，但本清单本身不产出 stage 文档。
+  - SUO-153 对当前会话岗位绑定做了纠偏：推荐岗位和未知岗位不再算正常完成证据，旧的 multi-job 扩张叙事视为 superseded。
 
 ## 2. Issue 总览表
 
@@ -71,13 +73,14 @@
 - 优先级：P0
 - 标签：`backend,trace,orchestration,artifact-contract,per-target-chain`
 - 描述：
-  把 `src/trace-boss.ts` 的正常执行改成按联系人逐链路处理，确保一次链路只服务一个 contact/target；同时更新输出契约，使 `output/chats.json` 和 `output/jobs.json` 能按 `target_id` 追溯，并保留 `traceTargets` 优先级、`target_id`、`maxJobsPerTarget` 与 continue-vs-abort 规则。必要时拆分 orchestration、command building、output writing、parser/filter 逻辑，避免继续堆在单文件里。
+  把 `src/trace-boss.ts` 的正常执行改成按联系人逐链路处理，确保一次链路只服务一个 contact/target；同时更新输出契约，使 `output/chats.json` 和 `output/jobs.json` 能按 `target_id` 追溯，并把 `traceTargets`、`maxJobsPerTarget` 降级为历史兼容字段。normal flow 只接受当前聊天会话真实绑定的首个岗位入口，`job_sug_*`、`/recommend/` 和未知岗位必须拒收。必要时拆分 orchestration、command building、output writing、parser/filter 逻辑，避免继续堆在单文件里。
 - 验收条件：
   - 正常流按 contact/target 逐条执行，不再把单会话多目标作为默认假设。
+  - 正常流只接受当前聊天会话绑定的首个岗位入口，不把 `job_sug_*`、`/recommend/` 或未知岗位写入 `jobs.json`。
   - `output/chats.json` 记录 `target_id`。
   - `output/jobs.json` 记录 `target_id` 与 URL 派生的 `job_id`。
   - 正常模式下，不出现 target 间重复 `open https://www.zhipin.com/web/geek/chat`。
-  - 失败 / abort 语义与 `maxJobsPerTarget`、continue-vs-abort 规则一致。
+  - `maxJobsPerTarget` 只作为历史兼容字段保留，失败 / abort 语义与 continue-vs-abort 规则一致。
   - 运行契约与代码结构分离后，单文件不再承载 orchestration、command building、output writing、parser/filter 全部职责。
 - 前置依赖：`SUO-147`
 - 关联路径：
@@ -106,11 +109,11 @@
 - 优先级：P0
 - 标签：`docs,contract,traceability,runbook`
 - 描述：
-  把 `README.md`、`docs/boss-agent-browser-trace.md` 以及相关 task / stage / exec 参考文档统一到逐联系人链路契约，显式写出 `target_id`、`job_id`、one-open-per-run、`maxJobsPerTarget` 与 continue-vs-abort 语义，并把旧的单会话多目标语言标成 superseded。此项只做文档对齐，不引入新的实现范围。
+  把 `README.md`、`docs/boss-agent-browser-trace.md` 以及相关 task / stage / exec 参考文档统一到逐联系人链路契约，显式写出 `target_id`、`job_id`、one-open-per-run、单目标单 job 与 continue-vs-abort 语义，并把旧的单会话多目标语言标成 superseded。补充说明 current-session binding 约束：推荐/未知岗位不算正常完成证据。此项只做文档对齐，不引入新的实现范围。
 - 验收条件：
   - `README.md` 与 `docs/boss-agent-browser-trace.md` 都改成以逐联系人链路作为 normal flow 的表述。
   - `docs/task/SUO-139-selector-inspection-multi-job-fix.md`、`docs/stage/stage_suo_139_selector_inspection_multi_job_fix.md`、`docs/exec/exec_SUO-143_job-detail-more-info-blocked.md` 不再把单会话多目标写成默认前提。
-  - 文档明确指出 `target_id` / `job_id` / one-open-per-run / `maxJobsPerTarget` / continue-vs-abort。
+  - 文档明确指出 `target_id` / `job_id` / one-open-per-run / 单目标单 job / continue-vs-abort，并明确拒收 `job_sug_*`、`/recommend/` 与未知岗位。
   - 旧假设在文档里被直接标记为 superseded，而不是只藏在评论或注释中。
 - 前置依赖：`SUO-147`
 - 关联路径：
@@ -142,9 +145,10 @@
 - 优先级：P1
 - 标签：`docs,validation,evidence,hand-off`
 - 描述：
-  把逐联系人链路的运行证据和回归检查收口成可消费的验收边界，重点验证 artifact 里是否能稳定追踪到单个 target，以及正常流是否已经移除了旧的重复 reopen 假设。该项主要沉淀验证口径和证据边界，不新增运行逻辑。
+  把逐联系人链路的运行证据和回归检查收口成可消费的验收边界，重点验证 artifact 里是否能稳定追踪到单个 target，以及正常流是否已经移除了旧的重复 reopen 假设。该项主要沉淀验证口径和证据边界，不新增运行逻辑。`job_sug_*` 和 `/recommend/` 证据只能作为失败/阻塞证据，不能作为完成证据。
 - 验收条件：
   - `output/chats.json` 与 `output/jobs.json` 的样例 / 验收说明都能稳定说明 `target_id` 的归属关系。
+  - `output/jobs.json` 的成功记录在 normal flow 中对每个 `target_id` 只保留 1 条。
   - 联合验证说明清楚列出“正常流不重复 open chat between targets”的检查点。
   - 验收说明把旧的单会话多目标假设明确写成 superseded 的历史约束。
   - 若验证发现 contract、docs、artifact 任一处仍保留旧假设，则该 issue 不得关闭。

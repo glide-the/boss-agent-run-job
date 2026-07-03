@@ -1,5 +1,7 @@
 # Exec Report: SUO-143 - 复现并修复 SUO-142：岗位详情更多信息丢失问题
 
+> Superseded by SUO-153 current-session binding correction. Historical context only; recommendation/unknown job URLs are not valid normal evidence.
+
 ## 1. 执行上下文
 - Task ID: `SUO-143`
 - 关联 Issue: `SUO-143`，`复现并修复 SUO-142：岗位详情更多信息丢失问题`

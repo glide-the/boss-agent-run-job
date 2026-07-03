@@ -1,5 +1,7 @@
 # Exec Report: SUO-152 - 补做 BOSS trace 模块拆分与结构回归验证
 
+> Superseded by SUO-153 current-session binding correction. Historical context only; recommendation/unknown job URLs are not valid normal evidence.
+
 ## 1. 执行上下文
 - Task ID: `SUO-152`
 - 关联 Issue: `SUO-152`，`补做 BOSS trace 模块拆分与结构回归验证`
@@ -108,4 +110,3 @@
 - 已完成内容: 将 `trace-boss` 的 orchestration、command building、target resolution、output writing、parser/filter logic 拆分到独立模块，并用 `check` + `trace:dry` + `trace` 证明 normal flow contract 未回归。
 - 未完成内容: 无。
 - 是否可进入 review / audit: 可。
-

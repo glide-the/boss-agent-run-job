@@ -42,19 +42,8 @@ export function limitJobLocators(config: Config, target?: TraceTargetConfig) {
     throw new Error("每个 trace target 至少需要一个岗位入口 locator");
   }
 
-  const requestedLimit = target?.maxJobs ?? config.maxJobsPerTarget ?? locators.length;
-  const effectiveLimit = Math.max(1, requestedLimit);
-  const plannedLocators = locators.slice(0, effectiveLimit);
-  if (plannedLocators.length >= effectiveLimit) return plannedLocators;
-
-  const fallbackCss = plannedLocators.find((locator) => locator.method === "css")
-    ?? config.jobEntryLocators.find((locator) => locator.method === "css");
-  if (!fallbackCss) return plannedLocators;
-
-  while (plannedLocators.length < effectiveLimit) {
-    plannedLocators.push(fallbackCss);
-  }
-  return plannedLocators;
+  // Normal flow only accepts the first current-session-bound job locator per target.
+  return locators.slice(0, 1);
 }
 
 export function locatorSignature(locator: Locator) {

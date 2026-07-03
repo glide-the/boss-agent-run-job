@@ -34,12 +34,12 @@ Input sufficiency decision:
 | --- | --- | --- | --- | --- |
 | STAGE-0 Readiness Gate | 串行: 确认任务来源、边界、输入齐备与执行门禁 | `execute-ready` 判定与三 issue 对齐结论 | 设计稿、任务包、Issue 清单、TASK-REQUIREMENT-FORMAT | 输入误读导致 stage 作用域偏移 |
 | STAGE-1 BTR-01 命令路径与 launch 基线 | 串行: 完成 normal / dry / inspect 路径命令入口盘点，确认 base args 唯一入口 | `agent-browser` 基线清单与 required args 合规规则 | STAGE-0 | 漏审计入口导致参数不一致 |
-| STAGE-2 BTR-01 逐联系人目标收敛 | 串行: 落实 `traceTargets` 优先、兼容回退、`target_id` 与任务顺序定义 | `target` 目标集合、`target_id` 规则、每目标 job 上限输入契约 | STAGE-1 | 目标规约歧义导致 `chats/jobs` 可追溯性丢失 |
-| STAGE-3 BTR-01 单会话主链路 | 串行: 打造一次 open 的 normal flow（chat list -> target -> jobs -> return） | 单会话采集主链路定义（不重开 chat） | STAGE-1, STAGE-2 | 回归到重复 open chat 的旧路径 |
-| STAGE-4 BTR-01 有界 job 与恢复语义 | 串行: 落地 `maxJobs`/`maxJobsPerTarget`、失败跳过、外部 blocker 终止规则 | 执行序列规则与 `trace-events` 失败事件标准 | STAGE-3 | 无条件 abort 误杀非外部失败 |
-| STAGE-5 BTR-01 输出契约与数据身份 | 串行: 锁定 `target_id`、`job_id`、`jobs.json/chats.json` 字段/去重与过滤边界 | 可追溯的 output 契约与噪声过滤证据口径 | STAGE-3 | URL 解析或过滤错位影响验收 |
+| STAGE-2 BTR-01 逐联系人目标收敛 | 串行: 落实 `traceTargets` 优先、兼容回退、`target_id` 与任务顺序定义，并限制为当前会话绑定入口 | `target` 目标集合、`target_id` 规则、单目标单 job 输入契约 | STAGE-1 | 目标规约歧义导致 `chats/jobs` 可追溯性丢失 |
+| STAGE-3 BTR-01 单会话主链路 | 串行: 打造一次 open 的 normal flow（chat list -> target -> bound job -> return） | 单会话采集主链路定义（不重开 chat） | STAGE-1, STAGE-2 | 回归到重复 open chat 的旧路径 |
+| STAGE-4 BTR-01 有界 job 与恢复语义 | 串行: 落地首个当前会话绑定 job 选择、失败跳过、外部 blocker 终止规则，并拒收推荐/未知岗位 | 执行序列规则与 `trace-events` 失败事件标准 | STAGE-3 | 无条件 abort 误杀非外部失败 |
+| STAGE-5 BTR-01 输出契约与数据身份 | 串行: 锁定 `target_id`、`job_id`、`jobs.json/chats.json` 字段/去重与过滤边界，且只接受当前会话绑定首个入口 | 可追溯的 output 契约与噪声过滤证据口径 | STAGE-3 | URL 解析或过滤错位影响验收 |
 | STAGE-6 BTR-01 代码边界重构（backend） | 并行: 拆分 orchestration/commands/output/parser 边界，维持统一调用入口 | `src/trace-boss.ts` + 拆分边界提案（`targets.ts`/`commands.ts`/`output.ts`/`parser.ts`） | STAGE-1, STAGE-3 | 大拆分引入行为漏改 |
-| STAGE-7 BTR-02 文档同步 | 并行: 更新 `README.md` 与 `docs/boss-agent-browser-trace.md` 到逐联系人链路契约 | 文档表述与 evidence 口径与 design/task 一致；旧假设标为 superseded | STAGE-2, STAGE-3, STAGE-5 | 文档与实现脱节 |
+| STAGE-7 BTR-02 文档同步 | 并行: 更新 `README.md` 与 `docs/boss-agent-browser-trace.md` 到逐联系人链路契约 | 文档表述与 evidence 口径与 design/task 一致；旧假设标为 superseded，且推荐/未知岗位被显式拒收 | STAGE-2, STAGE-3, STAGE-5 | 文档与实现脱节 |
 | STAGE-8 BTR-03 联合验收与证据收口 | 串行: 验证 BTR-01+ BTR-02 收敛后形成可执行 handoff 信号 | `bun run check`、`bun run trace:dry`、`bun run trace`、可选 `--inspect-selectors` 证据路径 | STAGE-3, STAGE-4, STAGE-5, STAGE-6, STAGE-7 | 外部 blocker 导致 live 证据无法完成 |
 | STAGE-9 Exec Handoff | 串行: 对下游 `ExecTaskAgent` 输出准入条件并提交 handoff | `execute-ready` 与验收门禁清单 | STAGE-8 | 准入条件表达不清导致重复返工 |
 
@@ -49,10 +49,10 @@ Input sufficiency decision:
 | --- | --- | --- |
 | STAGE-0 Readiness Gate | 确认 `SUO-150` 分工边界、输入齐备与 issue 拆分对齐 | 完成: 输入充分，判定 `execute-ready` |
 | STAGE-1 BTR-01 命令路径与 launch 基线 | 识别并统一 `agent-browser` command/log 基线入口 | 未开始: downstream execute |
-| STAGE-2 BTR-01 逐联系人目标收敛 | 完成 `traceTargets`/`conversationEntryLocators` 合并规则与 `target_id` 规则 | 未开始: downstream execute |
-| STAGE-3 BTR-01 单会话主链路 | 确保 normal flow 单 open 单会话 | 未开始: downstream execute |
-| STAGE-4 BTR-01 有界 job 与恢复语义 | 落地边界与 continue-vs-abort 行为 | 未开始: downstream execute |
-| STAGE-5 BTR-01 输出契约与数据身份 | 落地 `target_id`/`job_id` 与过滤规则执行标准 | 未开始: downstream execute |
+| STAGE-2 BTR-01 逐联系人目标收敛 | 完成 `traceTargets`/`conversationEntryLocators` 合并规则与 `target_id` 规则，并限定当前会话绑定首个入口 | 未开始: downstream execute |
+| STAGE-3 BTR-01 单会话主链路 | 确保 normal flow 单 open 单会话且仅跟随当前会话绑定首个岗位 | 未开始: downstream execute |
+| STAGE-4 BTR-01 有界 job 与恢复语义 | 落地边界与 continue-vs-abort 行为，拒收推荐/未知岗位 | 未开始: downstream execute |
+| STAGE-5 BTR-01 输出契约与数据身份 | 落地 `target_id`/`job_id` 与过滤规则执行标准，并拒收 `job_sug_*` | 未开始: downstream execute |
 | STAGE-6 BTR-01 代码边界重构（backend） | 输出 backend helper 边界拆分方案与迁移清单 | 未开始: downstream execute |
 | STAGE-7 BTR-02 文档同步 | 在文档中同步逐联系人链路与 supersede 注记 | 未开始: downstream execute |
 | STAGE-8 BTR-03 联合验收与证据收口 | 完成 check/trace 证据与 evidence 边界 | 未开始: downstream execute |
@@ -108,7 +108,7 @@ Parallelism: 可以在 STAGE-1 之后并行推进实现细化。
 - [ ] `traceTargets` 优先级先于 `conversationEntryLocators`。
 - [ ] 兼容回退去重，不重复同一联系人。
 - [ ] `target_id` 固定：`traceTargets[*].id` 优先，缺失用 `target-{index}`。
-- [ ] 每目标岗位列表按 `maxJobs` 或 `maxJobsPerTarget` 约束。
+- [ ] 每目标岗位列表只接受当前会话绑定的首个有效入口；`maxJobs` / `maxJobsPerTarget` 仅作历史兼容字段。
 - [ ] 失败记录保留 `target_id` 维度。
 
 ## STAGE-3 BTR-01 单会话主链路
@@ -181,7 +181,7 @@ Parallelism: 并行，最终依赖 BTR-01 核心语义稳定。
 
 阶段产出 checklist:
 
-- [ ] 更新 `README.md` 与 `docs/boss-agent-browser-trace.md` 对 `target_id`、`job_id`、单会话单-open、`maxJobsPerTarget` 的正向说明。
+- [ ] 更新 `README.md` 与 `docs/boss-agent-browser-trace.md` 对 `target_id`、`job_id`、单会话单-open、单目标单 job 的正向说明，并显式拒收推荐/未知岗位。
 - [ ] 明确 `target/job` 失败与继续逻辑。
 - [ ] 标记旧的“单会话多目标”旧假设为 superseded。
 - [ ] 确保 debug-only 检测和 normal flow 的证据边界在文档中一致。
@@ -198,7 +198,7 @@ Parallelism: 串行收口。
 
 - [ ] 运行并记录 `bun run check`。
 - [ ] 运行 `bun run trace:dry`，验证命令路径与 launch args。
-- [ ] 运行 `bun run trace`，验证单 open + 单会话 + `target_id` + `job_id`。
+- [ ] 运行 `bun run trace`，验证单 open + 单会话 + `target_id` + `job_id`，且每个 target 只记录 1 条成功 job 并拒收推荐/未知岗位。
 - [ ] 如必要，运行 `bun run trace -- --inspect-selectors` 并确认仅为 debug evidence。
 - [ ] 若被登录/风控/站点阻塞，记录精确 stop-point 与最小命令生成证明。
 - [ ] 产出 `BTR-03` 手册化验收结论（支持 BTR-01/02 的收口）。

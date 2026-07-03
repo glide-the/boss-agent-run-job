@@ -1,5 +1,7 @@
 # Exec Report: SUO-151 - 执行逐联系人 BOSS trace 重构与验证
 
+> Superseded by SUO-153 current-session binding correction. Historical context only; recommendation/unknown job URLs are not valid normal evidence.
+
 ## 1. 执行上下文
 - Task ID: `SUO-151`
 - 关联 Issue: `SUO-151`，执行逐联系人 BOSS trace 重构与验证

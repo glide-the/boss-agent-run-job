@@ -111,6 +111,21 @@ export function looksLikeJobDetail(url: string, config: Config) {
   return simplifiedPattern.length > 0 && url.includes(simplifiedPattern);
 }
 
+export function isRecommendedJobUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    const ka = parsed.searchParams.get("ka")?.toLowerCase() || "";
+    return (
+      ka.startsWith("job_sug") ||
+      ka.includes("recommend") ||
+      parsed.pathname.includes("/recommend/")
+    );
+  } catch {
+    const normalized = url.toLowerCase();
+    return normalized.includes("ka=job_sug") || normalized.includes("/recommend/");
+  }
+}
+
 export function extractMarkedSegment(output: string, startLabel: string, endLabel: string) {
   const startMarker = `${traceMarkerPrefix}${startLabel}`;
   const endMarker = `${traceMarkerPrefix}${endLabel}`;

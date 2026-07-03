@@ -11,6 +11,7 @@ import {
   extractMarkedSegment,
   lastNonEmptyLine,
   lastUrl,
+  isRecommendedJobUrl,
   looksLikeJobDetail,
   parseJobText
 } from "./parser";
@@ -151,16 +152,16 @@ export async function runSingleSessionTraceFlow(
     : [];
   const plannedJobAttempts = targets.reduce((sum, target) => sum + target.jobEntryLocators.length, 0);
   await trace("single-session-flow-start", {
-    steps: [
-      "open-chat-once",
-      "collect-full-chat-list",
-      "scroll-list-back",
-      "click-contact",
-      "collect-chat",
-      "click-configured-job-entry",
-      "collect-job",
-      "return-to-chat-with-browser-back"
-    ],
+      steps: [
+        "open-chat-once",
+        "collect-full-chat-list",
+        "scroll-list-back",
+        "click-contact",
+        "collect-chat",
+        "click-current-session-bound-job",
+        "collect-one-job",
+        "return-to-chat-with-browser-back"
+      ],
     scrolls,
     scrollPixels,
     targetCount: targets.length,
@@ -260,6 +261,21 @@ export async function runSingleSessionTraceFlow(
         continue;
       }
 
+      if (isRecommendedJobUrl(currentUrl)) {
+        await writeFile(join(projectRoot, jobRawFile), jobSegment);
+        await trace("job-not-collected", {
+          target_id: target.target_id,
+          jobAttempt: jobNumber,
+          reason: "命中推荐岗位 URL，跳过非当前会话绑定的岗位入口",
+          currentUrl,
+          currentTitle,
+          jobLocator,
+          flowRawFile,
+          rawTextFile: jobRawFile
+        });
+        continue;
+      }
+
       const jobId = extractJobId(currentUrl);
       if (!jobId) {
         await writeFile(join(projectRoot, jobRawFile), jobSegment);
@@ -311,6 +327,7 @@ export async function runSingleSessionTraceFlow(
         jobAttempt: jobNumber,
         jobLocator
       });
+      break;
     }
   }
 

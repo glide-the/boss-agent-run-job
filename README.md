@@ -36,9 +36,9 @@ config/boss.config.json
 - `chatListScrolls` / `chatListScrollPixels`：一次打开 chat 后滚动收集完整聊天列表
 - `screenshot`：是否截图
 - `conversationEntryLocators`：chat 列表中的联系人定位方式
-- `traceTargets`：有限目标集合；每个目标有稳定 `id`、联系人 locator、岗位入口 locator 列表和可选 `maxJobs`。如果 `traceTargets` 与 `conversationEntryLocators` 同时存在，会按 `traceTargets` 先执行，再补齐 `conversationEntryLocators` 中未重复的联系人继续执行。
-- `maxJobsPerTarget`：没有在目标上单独设置 `maxJobs` 时，每个目标最多尝试的岗位入口数。超过岗位入口数量时会按 CSS locator 方式补齐，并按顺序执行不同命中的索引，避免单个 locator 重复绑定同一条岗位。
-- `jobEntryLocators`：兼容旧配置的全局岗位入口 locator；当 `traceTargets[*].jobEntryLocators` 缺失时作为兜底
+- `traceTargets`：有限目标集合；每个目标有稳定 `id`、联系人 locator、岗位入口 locator 列表和可选 `maxJobs`。如果 `traceTargets` 与 `conversationEntryLocators` 同时存在，会按 `traceTargets` 先执行，再补齐 `conversationEntryLocators` 中未重复的联系人继续执行。正常流程只接受当前聊天会话里真实绑定的首个有效岗位入口，不把推荐页 / 未知岗位当作正常目标。
+- `maxJobsPerTarget`：历史兼容字段，不再驱动 normal flow 的多岗位扩张；正常流程只记录一个当前会话绑定 job。
+- `jobEntryLocators`：兼容旧配置的全局岗位入口 locator；当 `traceTargets[*].jobEntryLocators` 缺失时作为兜底。正常流程只使用当前会话里真实出现的首个有效岗位入口，不要把推荐页链接写进正常链路。
 - `excludedJobSectionHeadings`：岗位详情中不需要采集的尾部推荐区域，如相似职位、精选职位、热门职位、推荐公司等
 
 ## 运行
@@ -62,10 +62,10 @@ bun run trace
 3. 在同一浏览器会话内滚回列表顶部，不重新打开 chat
 4. 按 `traceTargets` 中的有限目标点击联系人；未配置 `traceTargets` 时兼容遍历 `conversationEntryLocators`
 5. 保存聊天上下文到 `output/chats.json`、`output/raw/chat-*.txt`
-6. 在当前聊天里按配置的岗位入口 locator 继续尝试，最多 `maxJobs` / `maxJobsPerTarget` 个
+6. 在当前聊天会话绑定的岗位入口里只接受第一个有效项，每个 target 只记录 1 个 job
 7. 从地址栏 URL 解析 `job_id`，保存带 `target_id` 的招聘信息到 `output/jobs.json`、`output/raw/job-<job_id>.txt`
 
-正常采集路径只生成一次 `open https://www.zhipin.com/web/geek/chat`。如果需要处理多个已配置联系人或同一联系人内的多个岗位入口，脚本通过浏览器后退返回 chat，不通过重新 `open` 入口页返回。重复解析到同一 `target_id + job_id` 的岗位会被跳过。
+正常采集路径只生成一次 `open https://www.zhipin.com/web/geek/chat`。如果需要处理多个已配置联系人，脚本通过浏览器后退返回 chat，不通过重新 `open` 入口页返回。每个 `target_id` 只接受一个 job；重复解析到同一 `target_id + job_id` 的岗位会被跳过，推荐页 / `job_sug_*` / `/recommend/` 链接不会被当作有效岗位入口。
 
 如果需要调试页面区域 selector，再显式运行：
 
@@ -101,7 +101,7 @@ bun run trace -- --inspect-selectors
 output/snapshots/chat-initial.txt
 ```
 
-根据页面里真实出现的按钮文本或链接，调整 `config/boss.config.json` 的 `jobEntryLocators`。
+根据页面里真实出现的按钮文本或链接，调整 `config/boss.config.json` 的 `jobEntryLocators`。正常流程只保留当前会话里真实绑定的首个有效岗位入口，不要把推荐页或未知岗位写进正常配置。
 
 ### 采集字段不完整
 

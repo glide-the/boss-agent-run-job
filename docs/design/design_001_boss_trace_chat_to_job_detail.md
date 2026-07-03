@@ -23,16 +23,16 @@ Related project docs:
 ## 1. Background and Goals
 
 `SUO-137` established a normal, single-open/single-session trace trajectory for BOSS chat → job detail.  
-`src/trace-boss.ts`, `README.md`, and downstream stage/exec work now require a stricter contract: trace must execute a bounded **per-contact chain** for each configured target and continue safely across multiple contacts.
+`src/trace-boss.ts`, `README.md`, and downstream stage/exec work now require a stricter contract: trace must execute a bounded **per-contact single-job chain** for each configured target and continue safely across multiple contacts.
 
 This design update supersedes the prior single-contact framing by explicitly defining:
 
 - one `open https://www.zhipin.com/web/geek/chat` per normal run
 - repeated in-session contact and job traversals
-- bounded per-contact job-attempt loops
+- at most one normal success job attempt per target/contact (single-job contract)
 - explicit target-level failure recovery
 
-The goal is a deterministic, low-noise, single-session path consumable by downstream Task/Stage/Exec agents.
+The goal is a deterministic, low-noise, single-session path consumable by downstream Task/Stage/Exec agents that never normalizes “same contact + multiple jobs” as complete evidence.
 
 ## 2. Scope Definition
 
@@ -43,13 +43,15 @@ In scope:
   2. collect chat list
   3. iterate configured targets in order (contact-by-contact)
   4. for each target, collect chat context
-  5. for each target, try bounded jobs
+  5. for each target, choose and collect exactly one current-session-bound job (first valid locator in configured order)
   6. return to chat for the next target in the same browser/session
   7. emit per-target and per-job evidence
-- Define target identity and bound rules (`traceTargets[*].id`, `maxJobs`, `maxJobsPerTarget`).
+- Define that `maxJobs` / `maxJobsPerTarget` are legacy multi-job controls and are not active in the normal flow unless explicitly re-enabled for a non-normal contract.
+- Define target identity and bound rules (`traceTargets[*].id`, `target_id`) for traceability.
 - Define how target/job failures are recorded and when the run continues vs aborts.
 - Define per-target/per-job output boundaries and naming.
 - Define mandatory launch args for all command paths.
+- Define the reject list for non-bound URLs: recommendation/discovery URLs such as `ka=job_sug_*` and `/recommend/` are not valid job evidence.
 
 Out of scope:
 
@@ -64,7 +66,7 @@ The key update is to treat each target as a chain:
 
 1. Click target contact.
 2. Read and save chat context for that target.
-3. Click bounded job entry(s) for that target.
+3. Select the first valid current-session-bound job locator from configured order.
 4. Parse URL-derived `job_id` and collect focused job text/snapshot.
 5. Return to chat with in-session command (`back`) before next target/job when needed.
 
@@ -77,7 +79,7 @@ Debug selector probing remains explicit `--inspect-selectors` and is not accepte
 
 ## 4. Detailed Design
 
-### 4.1 Normal Flow State Machine (Per-Contact Chain)
+### 4.1 Normal Flow State Machine (Per-Contact Single-Job Chain)
 
 State transitions:
 
@@ -88,15 +90,17 @@ State transitions:
 | `FOR_EACH_TARGET_START` | resolved target loaded | target list exhausted or blocker | `target_id` derived once from config or fallback index |
 | `SELECT_CONTACT` | click target locator | chat panel changed | no re-open of chat URL |
 | `COLLECT_CHAT_CONTEXT` | read current chat context | chat evidence persisted | context evidence includes `target_id` |
-| `FOR_EACH_JOB_ATTEMPT` | click job locator by job budget | job detail collected or target-job failure recorded | stop when `maxJobs` / `maxJobsPerTarget` reached |
-| `RETURN_TO_CHAT` | back to list context (`browser-back`) if needed | next job/target | URL/state must return to list/chat phase |
+| `SELECT_SINGLE_JOB` | scan configured locators for first current-session-bound candidate | valid job locator selected OR candidate exhaust | one normal-mode job at most for this target |
+| `COLLECT_SINGLE_JOB` | click and collect selected job detail | job detail collected or target-job failure recorded | URL parsed for `job_id`; no further normal-mode job attempts for this target |
+| `RETURN_TO_CHAT` | back to list context (`browser-back`) if needed | next target | URL/state must return to list/chat phase |
 | `DONE_OR_BLOCKED` | no more targets or external blocker | finish/fail with blocker evidence | failure state includes exact blocker + command evidence |
 
 Looping rules:
 
-- For each target, all configured `jobEntryLocators` (bounded) are attempted in order.
+- For each target, configured `jobEntryLocators` are scanned in order to locate the first current-session-bound, non-recommendation candidate. Stop after one accepted locator is collected.
 - `--url "*job_detail*"` and marker-based extraction determine success.
-- If a target job fails (missing detail URL / bad locator / stale segment), continue to next configured job if budget remains.
+- Recommendation/discovery URLs like `job_sug_*` and `/recommend/` are rejected even if the path resembles a job detail page.
+- If a target job fails (missing detail URL / bad locator / stale segment), continue to next configured locator only until one valid single-job candidate is accepted.
 - If contact transition fails, continue to next target only when that target is unrecoverable; abort entire run only for external blockers:
   - login redirect
   - CAPTCHA / risk-control
@@ -115,8 +119,10 @@ Target resolution rules:
 - Resolve job locator list per target as:
   - `traceTargets[*].jobEntryLocators` when present
   - otherwise global `jobEntryLocators`
-  - bounded by `traceTargets[*].maxJobs` (target override), else `maxJobsPerTarget`, else locator count
-- Enforce fallback duplication only to satisfy declared limit (CSS locator repeat strategy), not to extend unbounded collection.
+  - stop at first locator that results in accepted current-session-bound job evidence
+- Do not synthesize extra job locators or pad the list with CSS fallback repeats.
+- In normal mode, accepted output is capped at one job per target. Legacy `maxJobs` / `maxJobsPerTarget` are superseded for normal flow.
+- Reject recommendation/discovery URLs before they can be accepted as job evidence.
 
 ### 4.3 Selector and Data Collection Modes
 
@@ -125,6 +131,7 @@ Normal mode:
 - One chat open and one session.
 - Per-target loops for contacts/jobs.
 - Failure must be recorded as trace evidence and does not require repeated open.
+- Recommendation/discovery URLs are treated as non-bound failures and skipped, not written into `jobs.json`.
 
 Inspection mode:
 
@@ -142,7 +149,7 @@ Output contracts:
   - `collectedAt`
   - `rawTextFile`
   - `snapshotFile`
-- `output/jobs.json` must include for each successful job:
+- `output/jobs.json` must include for each target/job that reaches normal-mode acceptance:
   - `target_id`
   - `job_id`
   - `url`
@@ -150,6 +157,7 @@ Output contracts:
   - `snapshotFile` when saved
   - `screenshotFile` when screenshots enabled
   - `collectedAt`
+- Exactly one normal-mode record per `target_id` is allowed.
 
 Per-contact chain artifacts:
 
@@ -162,6 +170,7 @@ Per-contact chain artifacts:
 ### 4.5 Job Detail Output Boundary
 
 Job detail output must remain focused on the clicked/active job and current company.
+If a clicked link lands on a recommendation/discovery page (`job_sug_*`, `/recommend/`), it is not valid job evidence and must be rejected.
 
 Required job fields (when present):
 
@@ -242,8 +251,8 @@ Old output files from previous runs are not final completion evidence without re
 - Normal `bun run trace` opens `https://www.zhipin.com/web/geek/chat` only once.
 - Chat list collection and target loop happen in the same session.
 - For each target, a `chat-<target>.txt` raw/snapshot evidence exists.
-- For each attempted job entry:
-  - success: produces a `job-<job_id>.txt` (or equivalent) and job JSON record with `target_id`
+- For each target:
+  - normal-mode success is exactly one `job-<job_id>.txt` (or equivalent) and one job JSON record with `target_id`
   - failure: records `job-not-collected` in trace events with reason and locator
 - Normal mode does not run broad selector probing or repeated chat opens in loops.
 - `jobs.json` records stable `target_id` + URL-derived `job_id`.
@@ -258,8 +267,9 @@ Old output files from previous runs are not final completion evidence without re
 | --- | --- | --- |
 | Target locator drift | Some contacts/jobs become unclickable | keep locators configurable; preserve debug evidence; do not fake progress by reopening chat |
 | Virtualized chat list and duplicate entries | Missing contact or unstable order | collect list after scrolling, and keep `target_id`-indexed records |
+| Legacy multi-job fields misapplied | `maxJobs` / `maxJobsPerTarget` still interpreted as active for normal contract | explicitly mark as legacy/superseded and align downstream parse rules with `DEC-008` |
 | External session blockers (login/CAPTCHA/risk control/site down) | Normal flow cannot proceed | record exact blocker and provide command-generation evidence |
-| CSS locator fallback duplication behavior | Could create repeated attempts beyond useful items | enforce explicit per-target `maxJobs` and stop conditions |
+| Recommendation/discovery URLs masquerading as job detail pages | Could record jobs that are not bound to the current chat session | reject `job_sug_*`, `/recommend/`, and similar URLs before `jobs.json` write |
 | Old per-contact assumptions in downstream docs | Inconsistent execution | this design explicitly supersedes those assumptions and is the shared contract source |
 
 ## 7. Key Decision Records
@@ -314,17 +324,26 @@ Impact: design and output contracts are target-oriented and include per-contact 
 
 ### DEC-007: Target scope is bounded and resumable
 
-Decision: each target uses declared `maxJobs` / `maxJobsPerTarget`; target failures are recorded but do not necessarily abort all targets.
+Decision: normal target failure handling is resumable (continue-to-next-target), while bounded `maxJobs` / `maxJobsPerTarget` are not active constraints for normal flow and only apply to explicitly non-normal contract variants.
 
-Reason: unbounded multi-contact traversal creates noise and non-reproducible runs.
+Reason: unbounded target traversal creates noise and non-reproducible runs.
 
 Impact: continue-on-target-error and explicit external-blocker abort rules are required.
+
+### DEC-008: Normal contract accepts only one job per contact
+
+Decision: normal `bun run trace` captures at most one completion job per `target_id`/contact, selecting the first valid current-session-bound locator and stopping further per-target normal-job collection once accepted.
+
+Reason: active contract is "current-session single-position", and same-contact multi-job output is not reliable evidence for one-to-one chat-to-job attribution.
+
+Impact: normal-mode acceptance gates in downstream checks and documentation must expect one `jobs.json` record max per `target_id`; multi-job behavior is non-contractual unless explicitly re-scoped.
 
 ## 8. Incremental Change Notes
 
 - 2026-07-02: Updated this design to per-contact chain execution for SUO-147. This supersedes the earlier single-contact-path interpretation in `SUO-137`-level framing by explicitly defining bounded `traceTargets` iteration, per-target loop outcomes, and target-level output contracts.
 - 2026-07-02: Linked `docs/stage/stage_suo_139_selector_inspection_multi_job_fix.md` and `docs/exec/exec_SUO-143_job-detail-more-info-blocked.md` as active downstream context for design-consistency and verification constraints.
 - 2026-07-02: Clarified that normal flow continues to next target on recoverable target/job failures and aborts only on external blockers (login/CAPTCHA/risk/site loss, or browser/session failure).
+- 2026-07-03: For SUO-154, formalized `current-session single-job` active contract: normal mode is capped at one successful job per `target_id`, superseding legacy per-contact multi-job interpretation and `maxJobs` / `maxJobsPerTarget` normal acceptance.
 
 ## 9. Clarification / Blockers
 

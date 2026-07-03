@@ -29,11 +29,11 @@
 把当前 BOSS trace 正常流程收口为“逐联系人链路”的后端实现任务包，要求实现者能据此完成以下目标：
 
 1. 正常 `bun run trace` 保持单次打开 `https://www.zhipin.com/web/geek/chat` 的单会话轨迹。
-2. 在同一 browser/session 中完成 chat list 收集、联系人点击、聊天上下文采集、岗位入口点击、岗位详情采集。
+2. 在同一 browser/session 中完成 chat list 收集、联系人点击、聊天上下文采集、当前会话绑定的岗位入口点击、岗位详情采集。
 3. `output/chats.json` 与 `output/jobs.json` 必须能按 `target_id` 追溯。
 4. `job_id` 只能从当前地址栏的 `/job_detail/<job_id>.html` 解析，不允许从页面文本推断。
-5. `traceTargets`、`maxJobs`、`maxJobsPerTarget`、continue-vs-abort 规则必须写成明确契约。
-6. orchestration、command building、output writing、parser/filter logic 不再继续堆在单文件里，必要时拆成独立 helper 模块。
+5. `traceTargets`、`maxJobs`、`maxJobsPerTarget` 在 normal flow 中均视为历史兼容字段；正常流程只接受每个 target 的首个当前会话绑定 job，并显式拒收 `job_sug_*`、`/recommend/` 与未知岗位。
+6. orchestration、command building、output writing、parser/filter logic 不再继续堆在单文件里，必要时拆成独立 helper 模块，且不得通过 CSS fallback padding 扩张岗位列表。
 7. `--inspect-selectors` 保持显式 debug-only，不得作为正常完成证据。
 
 ## 4. 实现步骤
@@ -45,7 +45,7 @@
 - 固化本任务的核心不变量：
   - normal flow 只 open chat 一次
   - 目标遍历按 `traceTargets` 优先、`conversationEntryLocators` 补齐
-  - 每个目标的 job 数量必须受 `maxJobs` 或 `maxJobsPerTarget` 约束
+  - 每个目标只接受 1 个当前会话绑定 job，`maxJobs` / `maxJobsPerTarget` 不再驱动 normal flow 的多 job 扩张
   - 成功 job 必须携带 `target_id` + `job_id`
 
 ### 4.2 拆分 orchestration 边界
@@ -69,11 +69,12 @@
   - `output/snapshots/chat-<target>.txt`
   - `output/snapshots/job-detail-<job_id>.txt`
 - 保留 `job-not-collected`、`job-duplicate-skipped`、`selector-inspection-debug-evidence` 等 trace event 语义。
-- job detail 文本过滤必须去掉相似职位、推荐公司、热门职位、其他公司品牌信息等噪声区块。
+- job detail 文本过滤必须去掉相似职位、推荐公司、热门职位、其他公司品牌信息等噪声区块；`job_sug_*` 和 `/recommend/` 不是正常完成证据。
 
 ### 4.4 固化控制流语义
 
 - 保持正常流程的目标顺序、岗位尝试顺序、失败跳过规则和终止规则。
+- 仅允许当前会话绑定的岗位入口进入成功态，不允许推荐/未知岗位写入 `jobs.json`。
 - `returnToChat` 必须以 browser-back 作为同 session 回退策略，不得通过重新 open chat 回退。
 - 只有外部 blocker 才允许整轮 abort：
   - login redirect
@@ -89,8 +90,9 @@
   - `output/agent-browser-commands.log` 每条命令都包含 required args
   - normal flow 没有重复 open chat
   - `chats.json` / `jobs.json` 里都有 `target_id`
-  - `jobs.json` 里 `job_id` 来自 URL
+  - `jobs.json` 里 `job_id` 来自 URL，且每个 `target_id` 只记录 1 条成功 job
   - 过滤后的 raw/snapshot 不包含无关推荐区块
+  - `jobs.json` 不包含 `job_sug_*` 或 `/recommend/` URL
 - 若 live BOSS 运行被 blocker 卡住，必须保留 blocker 的精确位置和最小本地验证，不允许靠旧输出冒充完成。
 
 ## 5. 涉及文件路径
@@ -181,7 +183,7 @@
 ## 7. 依赖项
 
 - `SUO-147` 设计修订已完成并作为上游约束。
-- `traceTargets`、`maxJobs`、`maxJobsPerTarget`、`excludedJobSectionHeadings` 的配置语义保持稳定。
+- `traceTargets`、`maxJobs`、`maxJobsPerTarget`、`excludedJobSectionHeadings` 继续保留为配置字段，但 `maxJobs` / `maxJobsPerTarget` 在 normal flow 中仅作历史兼容，不再驱动多 job 扩张。
 - BOSS 登录态、风控状态和站点可用性。
 - 后续 `BTR-02` / `BTR-03` 会消费本任务包定义的 backend contract，但不反向扩大本任务范围。
 

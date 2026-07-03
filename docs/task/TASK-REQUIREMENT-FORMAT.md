@@ -26,12 +26,12 @@ You are `BackendTaskAgent` in the `design -> issue -> task -> stage` pipeline. C
 
 ## Background
 
-The design update defines a per-contact chain as the normal BOSS trace contract: open chat once, collect the chat list, iterate configured targets, collect chat context for each target, attempt bounded job entries, return to chat in the same browser/session, and keep job detail output scoped to the clicked job/current company.
+The design update defines a per-contact chain as the normal BOSS trace contract: open chat once, collect the chat list, iterate configured targets, collect chat context for each target, accept at most one current-session-bound job per target, return to chat in the same browser/session, and keep job detail output scoped to the clicked job/current company.
 
 `src/trace-boss.ts` already contains most of the flow scaffolding, but `BTR-01` needs a backend task package that makes the implementation boundary explicit:
 
 1. preserve one-open-per-run normal flow
-2. preserve bounded target/job iteration with `traceTargets`, `target_id`, `maxJobs`, and `maxJobsPerTarget`
+2. preserve one-job-per-target current-session binding with `traceTargets` and `target_id`; `maxJobs` / `maxJobsPerTarget` are legacy compatibility fields, not active normal-flow limits, while rejecting `job_sug_*`, `/recommend/`, and unknown jobs
 3. keep `job_id` sourced from the current `/job_detail/<job_id>.html` URL
 4. keep continue-vs-abort semantics explicit for target/job failure handling
 5. split orchestration, command building, output writing, and parser/filter logic out of a single monolith where needed
@@ -61,8 +61,10 @@ The design update defines a per-contact chain as the normal BOSS trace contract:
 - Normal `bun run trace` remains one open `https://www.zhipin.com/web/geek/chat` trajectory for the run.
 - `output/chats.json` records `target_id`.
 - `output/jobs.json` records `target_id` and URL-derived `job_id`.
+- `output/jobs.json` does not accept `job_sug_*` or `/recommend/` URLs as successful jobs.
+- Normal mode accepts at most one job per target and does not continue to same-contact other jobs after a success.
 - Normal mode does not treat `--inspect-selectors` as completion evidence.
-- Multi-target execution remains bounded and configuration-driven.
+- Single-job-per-target execution remains bounded and configuration-driven.
 - Every downstream verification path requires fresh evidence or exact external blocker evidence.
 
 ## Output Instruction
