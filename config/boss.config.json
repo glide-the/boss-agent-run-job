@@ -1,12 +1,13 @@
 {
   "account": {
-    "enabled": false,
-    "strategy": "none",
+    "enabled": true,
+    "strategy": "manual",
     "waitForLogin": true,
     "loginCheckUrl": "https://www.zhipin.com/web/geek/chat",
     "loginCheckSelectors": [".chat-container", ".chat-list", ".friend-list"],
     "loginPollIntervalMs": 3000,
-    "loginTimeoutMs": 120000
+    "loginTimeoutMs": 20000,
+    "description": "manual: user is expected to switch account in the browser before login wait"
   },
   "perContactChain": {
     "returnToChatMethod": "browser-back"

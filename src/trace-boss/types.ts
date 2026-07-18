@@ -20,7 +20,7 @@ export type TraceTargetConfig = {
   maxJobs?: number;
 };
 
-export type AccountSwitchStrategy = "click-locator" | "open-url" | "none";
+export type AccountSwitchStrategy = "click-locator" | "open-url" | "none" | "manual";
 
 export type AccountConfig = {
   enabled?: boolean;

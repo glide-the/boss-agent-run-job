@@ -4,6 +4,8 @@ import { runBatch } from "../commands";
 import { setTimeout } from "node:timers/promises";
 
 export class LoginWaiter {
+  private loginPageWarned = false;
+
   constructor(private readonly ctx: AccountSwitchContext) {}
 
   async wait(): Promise<LoginWaitResult> {
@@ -43,6 +45,8 @@ export class LoginWaiter {
       "snapshot -i -u -c"
     ]);
 
+    const loginPagePattern = /\/web\/user\/?|\/login\/?/;
+
     const output = await runBatch(
       this.ctx.config,
       [
@@ -54,7 +58,15 @@ export class LoginWaiter {
     );
 
     const currentUrl = output.match(/^https?:\/\/\S+$/m)?.[0] ?? "";
-    const urlOk = currentUrl.includes(checkUrl) || checkUrl.includes(currentUrl) || currentUrl.startsWith(checkUrl);
+    if (loginPagePattern.test(currentUrl) && !this.loginPageWarned) {
+      this.loginPageWarned = true;
+      console.log(`[login] 检测到登录页 ${currentUrl}，请完成登录或切换账号，脚本会继续等待...`);
+      await this.ctx.trace("login-page-detected", { currentUrl });
+    }
+
+    const urlOk =
+      currentUrl.length > 0 &&
+      (currentUrl.includes(checkUrl) || checkUrl.includes(currentUrl) || currentUrl.startsWith(checkUrl));
 
     for (const selector of selectors) {
       const count = this.extractCount(output, selector);
@@ -68,9 +80,9 @@ export class LoginWaiter {
     }
 
     return {
-      loggedIn: urlOk,
+      loggedIn: false,
       url: currentUrl,
-      evidence: `urlOk=${urlOk}, selectors=${selectors.join(",")}, output=${output.slice(0, 300)}`
+      evidence: `urlOk=${urlOk}, selectors=${selectors.join(",")}, url=${currentUrl}, output=${output.slice(0, 300)}`
     };
   }
 

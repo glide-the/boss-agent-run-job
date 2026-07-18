@@ -77,6 +77,23 @@ export class NoOpStrategy implements IAccountSwitchStrategy {
   }
 }
 
+export class ManualStrategy implements IAccountSwitchStrategy {
+  readonly name = "manual" as const;
+
+  async execute(ctx: AccountSwitchContext): Promise<AccountSwitchResult> {
+    console.log("[account-switch] manual strategy: please switch accounts in the opened Chrome window. The script will wait for login detection.");
+    await ctx.trace("account-switch-manual", {
+      reason: "waiting for user to switch account manually in the browser",
+      waitForLogin: ctx.config.account?.waitForLogin ?? true
+    });
+    return {
+      switched: true,
+      requiresLogin: ctx.config.account?.waitForLogin ?? true,
+      evidence: "manual account switch: user is expected to change account in the browser before login wait"
+    };
+  }
+}
+
 export class AccountSwitcher {
   private readonly strategies: Map<AccountSwitchStrategy, IAccountSwitchStrategy> = new Map();
   private readonly defaultStrategy: IAccountSwitchStrategy = new NoOpStrategy();
@@ -85,6 +102,7 @@ export class AccountSwitcher {
     this.register(new ClickLocatorStrategy());
     this.register(new OpenUrlStrategy());
     this.register(new NoOpStrategy());
+    this.register(new ManualStrategy());
   }
 
   register(strategy: IAccountSwitchStrategy): void {
