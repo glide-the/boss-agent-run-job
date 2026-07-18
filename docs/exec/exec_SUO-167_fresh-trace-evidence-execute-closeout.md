@@ -63,7 +63,7 @@
 
 ## 6. 风险与阻塞
 - 风险: full normal trace 采用 59-target 串行 traversal，在 live site 上耗时过长，且没有在可接受窗口内写出收口 artifact
-- 阻塞: 需要 `Paperclip runtime / browser batch executor` 提供更长的执行窗口，或批准改成分块执行策略，否则 normal `bun run trace` 无法稳定完成 closeout
+- 阻塞: 当前 issue 已被 board 取消为 duplicate leaf；它不再是活跃执行路径，因此不应继续作为 live blocker 追踪
 - 需要上游澄清的问题:
   - 是否接受把 normal trace 拆成更小的 batch/chunk，以减少单次 batch 的等待和失败半径
   - 是否要求继续等待当前 live site 执行窗口，而不是用 dry-run inspect 证据作为 blocker 补充
@@ -74,7 +74,7 @@
 - [x] 已记录变更
 - [ ] 已满足验收条件
 - [ ] 可进入 review / audit
-- 当前状态: `blocked`
+- 当前状态: `cancelled`
 
 ## 8. 回滚建议
 - 回滚文件:
@@ -92,3 +92,9 @@
   - 这次 dry-run inspect 的 selector evidence 只证明 debug path 可用，不代表 normal closeout 已完成
   - 重新尝试 normal trace 前，先确认 runtime/batch strategy 已调整，否则会重复遇到同类阻塞
 
+## 9. Board Cancellation Delta
+- Latest board comment: [SUO-167#comment-d1aa59c2-d517-4a6d-a7e3-7ff7acccc06b](/SUO/issues/SUO-167#comment-d1aa59c2-d517-4a6d-a7e3-7ff7acccc06b)
+- Board disposition: `SUO-167` is a duplicate leaf in the `SUO-164 -> SUO-167` branch and is not the authoritative execution path.
+- Canonical branch: `SUO-160 -> SUO-163 -> SUO-170` with recovery delegated through `SUO-179`.
+- Impact: stop treating this issue as an active blocker; preserve its thread/evidence for audit only.
+- Further action: none on this leaf unless the board reopens it explicitly.

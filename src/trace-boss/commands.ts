@@ -12,7 +12,21 @@ export function buildAgentBrowserBaseArgs(agentConfig: AgentBrowserConfig) {
   }
   base.push("--state", agentConfig.state);
   if (agentConfig.headed) base.push("--headed");
+  const sessionName = buildAgentBrowserSessionName();
+  if (sessionName) {
+    base.push("--session", sessionName, "--restore", "--restore-save", "auto");
+  }
   return base;
+}
+
+export function buildAgentBrowserSessionName() {
+  const explicitSession = process.env.AGENT_BROWSER_SESSION?.trim();
+  if (explicitSession) return explicitSession;
+
+  const runId = process.env.PAPERCLIP_RUN_ID?.trim();
+  if (runId) return `boss-agent-${runId}`;
+
+  return "boss-agent-trace";
 }
 
 export function validateAgentBrowserConfig(agentConfig: AgentBrowserConfig) {
@@ -51,9 +65,7 @@ export function returnToChatCommands() {
 
 export function locatorToClickCommand(locator: Locator, cssOccurrence?: number) {
   if (locator.method === "find-text") {
-    return locator.exact
-      ? command("find", "text", locator.value, "click", "--exact")
-      : command("find", "text", locator.value, "click");
+    return command("eval", buildDomTextClickScript(locator.value, locator.exact));
   }
 
   if (locator.method === "dom-text") {
@@ -73,11 +85,85 @@ export function locatorToClickCommand(locator: Locator, cssOccurrence?: number) 
 
 export function buildDomTextClickScript(value: string, exact = false) {
   const textLiteral = JSON.stringify(value);
-  const comparison = exact
-    ? `normalized === ${textLiteral}`
-    : `normalized.includes(${textLiteral})`;
 
-  return `(() => {\n  const normalize = (text) => (text || "").replace(/\\s+/g, " ").trim();\n  const matches = (node) => {\n    const normalized = normalize(node.textContent);\n    return ${comparison};\n  };\n  const clickableSelectors = "a,button,[role=\\"button\\"],[role=\\"link\\"],[onclick]";\n  const visitDocument = (doc, seen = new Set()) => {\n    if (!doc || seen.has(doc)) return null;\n    seen.add(doc);\n    const candidates = Array.from(doc.querySelectorAll("*"));\n    const target = candidates.find((node) => matches(node));\n    if (target) return target;\n    for (const frame of Array.from(doc.querySelectorAll("iframe"))) {\n      try {\n        const nested = visitDocument(frame.contentDocument, seen);\n        if (nested) return nested;\n      } catch {\n        // Ignore cross-origin frames.\n      }\n    }\n    return null;\n  };\n  const activate = (node) => {\n    if (!node) return "not-found";\n    const clickable = node.closest(clickableSelectors) || node;\n    if (typeof clickable.scrollIntoView === "function") {\n      clickable.scrollIntoView({ block: "center", inline: "center" });\n    }\n    const rawHref = clickable.getAttribute("href") || clickable.getAttribute("data-href") || clickable.getAttribute("data-url") || clickable.dataset?.href || clickable.dataset?.url;\n    if (rawHref && !rawHref.startsWith("javascript:")) {\n      const view = clickable.ownerDocument.defaultView;\n      if (view) {\n        view.location.href = new URL(rawHref, clickable.ownerDocument.baseURI).href;\n        return "navigated";\n      }\n    }\n    const view = clickable.ownerDocument.defaultView;\n    if (view) {\n      const eventInit = { bubbles: true, cancelable: true, view };\n      clickable.dispatchEvent(new view.MouseEvent("mousedown", eventInit));\n      clickable.dispatchEvent(new view.MouseEvent("mouseup", eventInit));\n      clickable.dispatchEvent(new view.MouseEvent("click", eventInit));\n    }\n    if (typeof clickable.click === "function") {\n      clickable.click();\n    }\n    return "clicked";\n  };\n  const target = visitDocument(document);\n  return activate(target);\n})();`;
+  return `(() => {
+  const search = ${textLiteral};
+  const normalize = (text) => (text || "").replace(/\\s+/g, " ").trim();
+  const clickableSelectors = "a,button,[role=\\"button\\"],[role=\\"link\\"],[onclick]";
+  const isVisible = (node) => {
+    const view = node.ownerDocument.defaultView;
+    if (!view) return false;
+    const style = view.getComputedStyle(node);
+    const rect = node.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const isDirectClickable = (node) => {
+    if (!node || node === document.body || node === document.documentElement) return false;
+    const view = node.ownerDocument.defaultView;
+    const style = view ? view.getComputedStyle(node) : null;
+    return node.matches(clickableSelectors) || Boolean(node.getAttribute("onclick")) || Boolean(node.getAttribute("href")) || Boolean(node.getAttribute("data-href")) || Boolean(node.getAttribute("data-url")) || Boolean(style && style.cursor === "pointer");
+  };
+  const pickClickableAncestor = (node) => {
+    let current = node;
+    let depth = 0;
+    while (current && current !== document.body && current !== document.documentElement && depth < 8) {
+      if (isDirectClickable(current)) return { target: current, depth };
+      current = current.parentElement;
+      depth += 1;
+    }
+    return null;
+  };
+  const candidates = [];
+  for (const node of Array.from(document.querySelectorAll("*"))) {
+    const text = normalize(node.textContent);
+    if (!text) continue;
+    if (${exact ? "text !== search" : "!text.includes(search)"}) continue;
+    if (!isVisible(node)) continue;
+    const clickable = pickClickableAncestor(node);
+    if (!clickable) continue;
+    const clickableText = normalize(clickable.target.textContent);
+    if (!clickableText) continue;
+    if (${exact ? "clickableText !== search" : "!clickableText.includes(search)"}) continue;
+    candidates.push({
+      target: clickable.target,
+      textLength: clickableText.length,
+      exactMatch: clickableText === search,
+      direct: clickable.target === node,
+      depth: clickable.depth
+    });
+  }
+  if (candidates.length === 0) return "not-found";
+  candidates.sort((a, b) => {
+    if (a.exactMatch !== b.exactMatch) return a.exactMatch ? -1 : 1;
+    if (a.direct !== b.direct) return a.direct ? -1 : 1;
+    if (a.textLength !== b.textLength) return a.textLength - b.textLength;
+    if (a.depth !== b.depth) return a.depth - b.depth;
+    return 0;
+  });
+  const target = candidates[0].target;
+  if (typeof target.scrollIntoView === "function") {
+    target.scrollIntoView({ block: "center", inline: "center" });
+  }
+  const rawHref = target.getAttribute("href") || target.getAttribute("data-href") || target.getAttribute("data-url") || target.dataset?.href || target.dataset?.url;
+  if (rawHref && !rawHref.startsWith("javascript:")) {
+    const view = target.ownerDocument.defaultView;
+    if (view) {
+      view.location.href = new URL(rawHref, target.ownerDocument.baseURI).href;
+      return "navigated";
+    }
+  }
+  const view = target.ownerDocument.defaultView;
+  if (view) {
+    const eventInit = { bubbles: true, cancelable: true, view };
+    target.dispatchEvent(new view.MouseEvent("mousedown", eventInit));
+    target.dispatchEvent(new view.MouseEvent("mouseup", eventInit));
+    target.dispatchEvent(new view.MouseEvent("click", eventInit));
+  }
+  if (typeof target.click === "function") {
+    target.click();
+  }
+  return "clicked";
+})();`;
 }
 
 export async function agent(config: Config, args: string[], options: { optional?: boolean } = {}) {

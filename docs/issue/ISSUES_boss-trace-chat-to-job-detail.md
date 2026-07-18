@@ -256,3 +256,4 @@
 
 - 2026-07-03: Revalidated `docs/design/design_001_boss_trace_chat_to_job_detail.md` against this Issue 清单. Updated the issue titles, coverage wording, dependency anchors, and DEC-009 / DEC-010 references so the list now treats left-panel discovery as the source of truth and keeps inspect-mode cardinality aligned.
 - 2026-07-03 20:35 CST: Revalidated the current design and this Issue 清单 again in the active workspace; left-panel coverage, `leftIndex` / `targetProvenance`, and inspect-mode cardinality remain aligned, so no new issue boundaries were introduced.
+- 2026-07-04: Revalidated `docs/design/design_001_boss_trace_chat_to_job_detail.md` against this Issue 清单 in the active Paperclip run; the issue list remains aligned with the left-panel coverage contract and no boundary changes were required.

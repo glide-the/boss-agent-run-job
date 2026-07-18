@@ -85,3 +85,9 @@
 - Latest comment acknowledged this heartbeat: [SUO-155#comment-b4b4d67e-3ffd-48d9-b91c-4d319add5667](/SUO/issues/SUO-155#comment-b4b4d67e-3ffd-48d9-b91c-4d319add5667)
 - Current thread reply added: [SUO-155#comment-17c778e6-bede-4671-a58f-b97cac65fda9](/SUO/issues/SUO-155#comment-17c778e6-bede-4671-a58f-b97cac65fda9)
 - No blocker drift was observed; disposition remains `blocked`.
+
+## 12. Live chain refresh
+- Latest comment acknowledged this heartbeat: [SUO-155#comment-3a5d82ec-1726-4f0a-a752-05685e5d58a0](/SUO/issues/SUO-155#comment-3a5d82ec-1726-4f0a-a752-05685e5d58a0)
+- Current thread reply added: [SUO-155#comment-481dbddf-d48b-4670-b105-e117295d30d9](/SUO/issues/SUO-155#comment-481dbddf-d48b-4670-b105-e117295d30d9)
+- Live leaf blocker is now [SUO-170](/SUO/issues/SUO-170) under [SUO-159](/SUO/issues/SUO-159); [SUO-163](/SUO/issues/SUO-163) is historical reference evidence only.
+- Disposition remains `blocked`; no deliverable work resumed.

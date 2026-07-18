@@ -6,3 +6,4 @@ output/**/*.png
 !output/**/.gitkeep
 output
 outputs
+my-auth.json
