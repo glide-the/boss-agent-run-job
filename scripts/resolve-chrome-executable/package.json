@@ -1,0 +1,17 @@
+{
+  "name": "@boss-agent/resolve-chrome-executable",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/resolve-chrome-executable.ts",
+  "types": "src/resolve-chrome-executable.ts",
+  "bin": {
+    "boss-agent-resolve-chrome-executable": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "bun run build.ts",
+    "chrome:path": "bun run build.ts && node ./dist/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

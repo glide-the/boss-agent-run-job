@@ -1,4 +1,16 @@
 {
+  "account": {
+    "enabled": false,
+    "strategy": "none",
+    "waitForLogin": true,
+    "loginCheckUrl": "https://www.zhipin.com/web/geek/chat",
+    "loginCheckSelectors": [".chat-container", ".chat-list", ".friend-list"],
+    "loginPollIntervalMs": 3000,
+    "loginTimeoutMs": 120000
+  },
+  "perContactChain": {
+    "returnToChatMethod": "browser-back"
+  },
   "chatUrl": "https://www.zhipin.com/web/geek/chat",
   "startUrl": "https://www.zhipin.com/web/geek/chat",
   "chatListScrolls": 12,
@@ -13,7 +25,8 @@
       "/Users/dmeck/agent-brower/stealth-extension"
     ],
     "state": "/Users/dmeck/agent-brower/my-auth.json",
-    "headed": true
+    "headed": true,
+    "resolveExecutablePath": true
   },
   "chatAreaSelectors": [
     ".chat-container",

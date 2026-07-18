@@ -4,9 +4,15 @@ import { join } from "node:path";
 import type { AgentBrowserConfig, Config, Locator } from "./types";
 import { projectRoot } from "./runtime";
 import { requiredAgentBrowserConfig, traceMarkerPrefix } from "./types";
+import { resolveChromeExecutable } from "@boss-agent/resolve-chrome-executable";
 
 export function buildAgentBrowserBaseArgs(agentConfig: AgentBrowserConfig) {
   const base: string[] = [];
+  if (agentConfig.resolveExecutablePath) {
+    base.push("--executable-path", resolveChromeExecutable(agentConfig.executablePath));
+  } else if (agentConfig.executablePath) {
+    base.push("--executable-path", agentConfig.executablePath);
+  }
   for (const extension of agentConfig.extensions) {
     base.push("--extension", extension);
   }

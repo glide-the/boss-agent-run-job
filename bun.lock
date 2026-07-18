@@ -3,14 +3,26 @@
   "workspaces": {
     "": {
       "name": "boss-agent",
+      "dependencies": {
+        "@boss-agent/resolve-chrome-executable": "workspace:*",
+      },
       "devDependencies": {
         "@types/bun": "latest",
         "tsx": "^4.22.5",
         "typescript": "latest",
       },
     },
+    "scripts/resolve-chrome-executable": {
+      "name": "@boss-agent/resolve-chrome-executable",
+      "version": "0.1.0",
+      "bin": {
+        "boss-agent-resolve-chrome-executable": "./dist/cli.js",
+      },
+    },
   },
   "packages": {
+    "@boss-agent/resolve-chrome-executable": ["@boss-agent/resolve-chrome-executable@workspace:scripts/resolve-chrome-executable"],
+
     "@esbuild/aix-ppc64": ["@esbuild/aix-ppc64@0.28.1", "", { "os": "aix", "cpu": "ppc64" }, "sha512-Svl7tq8k/08+p6CXPpRjQ1fKX+1odH/BQbb48fV6fj3CWHhsoIOoY87w1oHXm0qEpkIK3ZfVgp0hed3XBXzXMQ=="],
 
     "@esbuild/android-arm": ["@esbuild/android-arm@0.28.1", "", { "os": "android", "cpu": "arm" }, "sha512-0k2F129Xdio1TdJfzJ8sy1Q47vUD2NnwdhiAf7drUN1EBTfPf4hsFCtmMgu/6m8JSzsBrlmVjudMBQqOfG8usQ=="],

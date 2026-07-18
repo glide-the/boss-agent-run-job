@@ -8,6 +8,8 @@ export type AgentBrowserConfig = {
   extensions: string[];
   state: string;
   headed: boolean;
+  executablePath?: string;
+  resolveExecutablePath?: boolean;
 };
 
 export type TraceTargetConfig = {
@@ -18,7 +20,33 @@ export type TraceTargetConfig = {
   maxJobs?: number;
 };
 
+export type AccountSwitchStrategy = "click-locator" | "open-url" | "none";
+
+export type AccountConfig = {
+  enabled?: boolean;
+  strategy?: AccountSwitchStrategy;
+  switchLocator?: Locator;
+  switchUrl?: string;
+  waitForLogin?: boolean;
+  loginCheckUrl?: string;
+  loginCheckSelectors?: string[];
+  loginPollIntervalMs?: number;
+  loginTimeoutMs?: number;
+};
+
+export type PerContactChainConfig = {
+  returnToChatMethod?: "browser-back" | "open-chat-url";
+};
+
+export type AccountSwitchContext = {
+  config: Config;
+  chatUrl: string;
+  trace: (step: string, detail?: unknown) => Promise<void>;
+};
+
 export type Config = {
+  account?: AccountConfig;
+  perContactChain?: PerContactChainConfig;
   chatUrl: string;
   startUrl?: string;
   chatListScrolls: number;
@@ -102,6 +130,26 @@ export type SelectorProbe = {
   selector: string;
   startLabel: string;
   endLabel: string;
+};
+
+export type AccountSwitchResult = {
+  switched: boolean;
+  requiresLogin: boolean;
+  evidence: string;
+};
+
+export type LoginWaitResult = {
+  loggedIn: boolean;
+  url?: string;
+  evidence: string;
+};
+
+export type PerContactBatchResult = {
+  target: RuntimeTraceTarget;
+  chat?: ChatRecord;
+  job?: JobRecord;
+  failedReason?: string;
+  rawOutput: string;
 };
 
 export const traceMarkerPrefix = "__BOSS_TRACE_MARKER__:";

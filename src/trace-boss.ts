@@ -1,25 +1,12 @@
 import { join } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import {
-  buildAgentBrowserBaseArgs,
-  validateAgentBrowserConfig
-} from "./trace-boss/commands";
-import {
-  collectFullChatList,
-  runSingleSessionTraceFlow
-} from "./trace-boss/orchestration";
+import { buildAgentBrowserBaseArgs, validateAgentBrowserConfig } from "./trace-boss/commands";
+import { runSingleSessionTraceFlow } from "./trace-boss/orchestration";
+import { BrowserSession } from "./trace-boss/browser/session";
+import { TraceEventTracker } from "./trace-boss/trace/event-tracker";
 import { projectRoot } from "./trace-boss/runtime";
-import type {
-  ChatRecord,
-  Config,
-  JobRecord,
-  TraceEvent
-} from "./trace-boss/types";
-import {
-  ensureOutputDirs,
-  writeJson,
-  writeTraceReport
-} from "./trace-boss/output";
+import type { Config } from "./trace-boss/types";
+import { ensureOutputDirs, writeJson, writeTraceReport } from "./trace-boss/output/writer";
 
 const cliArgs = process.argv.slice(2);
 const dryRun = cliArgs.includes("--dry-run");
@@ -36,37 +23,25 @@ async function main() {
   await writeJson(join(out, "chats.json"), []);
   await writeJson(join(out, "jobs.json"), []);
 
+  const tracker = new TraceEventTracker(out);
+  const trace = tracker.trace.bind(tracker);
+
   const baseArgs = buildAgentBrowserBaseArgs(config.agentBrowser);
   await printRunParameters(config, out, baseArgs);
 
-  const traceEvents: TraceEvent[] = [];
-  const jobs: JobRecord[] = [];
-  const chats: ChatRecord[] = [];
+  const chatUrl = config.chatUrl || config.startUrl || "https://www.zhipin.com/web/geek/chat";
 
-  const trace = async (step: string, detail?: unknown) => {
-    const event = { ts: new Date().toISOString(), step, detail };
-    traceEvents.push(event);
-    console.log(`[trace] ${step}`, detail ? JSON.stringify(detail) : "");
-    await writeJson(join(out, "trace-events.json"), traceEvents);
-  };
-
-  const conversationLocators = config.conversationEntryLocators || [];
-  const chatList = await collectFullChatList(
-    config,
-    out,
-    trace,
-    inspectSelectors,
-    chatUrl(config)
-  );
+  const session = new BrowserSession();
+  const chatList = await session.setup(config, out, chatUrl, trace);
   await writeJson(join(out, "chat-list.json"), chatList.entries);
 
   if (dryRun) {
     await trace("dry-run-stop", {
-      message: "已打开 chat 页面并保存 snapshot/read；未点击岗位入口。",
+      message: "已打开 chat 页面、完成账号切换/登录等待并保存 chat list snapshot；未点击岗位入口。",
       next: "查看 output/snapshots/chat-list-full.txt、output/raw/chat-list-full.txt 和 output/chat-list.json 后微调 config/boss.config.json。"
     });
-    await trace("done", { jobCount: jobs.length });
-    await writeTraceReport(out, traceEvents, jobs);
+    await trace("done", { jobCount: 0 });
+    await writeTraceReport(out, tracker.getEvents(), []);
     return;
   }
 
@@ -74,18 +49,16 @@ async function main() {
     config,
     out,
     chatList.entries,
-    conversationLocators,
+    config.conversationEntryLocators || [],
     trace,
     inspectSelectors
   );
   await writeJson(join(out, "chat-list.json"), result.chatList.entries);
-  chats.push(...result.chats);
-  jobs.push(...result.jobs);
-  await writeJson(join(out, "chats.json"), chats);
-  await writeJson(join(out, "jobs.json"), jobs);
+  await writeJson(join(out, "chats.json"), result.chats);
+  await writeJson(join(out, "jobs.json"), result.jobs);
 
-  await trace("done", { jobCount: jobs.length });
-  await writeTraceReport(out, traceEvents, jobs);
+  await trace("done", { jobCount: result.jobs.length });
+  await writeTraceReport(out, tracker.getEvents(), result.jobs);
 }
 
 async function loadConfig(): Promise<Config> {
@@ -96,10 +69,6 @@ async function loadConfig(): Promise<Config> {
   return config;
 }
 
-function chatUrl(config: Config) {
-  return config.chatUrl || config.startUrl || "https://www.zhipin.com/web/geek/chat";
-}
-
 async function printRunParameters(
   config: Config,
   outputDir: string,
@@ -108,10 +77,11 @@ async function printRunParameters(
   const parameters = {
     cliArgs,
     dryRun,
+    noScreenshot,
     inspectSelectors,
     projectRoot,
     configFile: join(projectRoot, "config", "boss.config.json"),
-    chatUrl: chatUrl(config),
+    chatUrl: config.chatUrl || config.startUrl,
     startUrl: config.startUrl,
     chatListScrolls: config.chatListScrolls,
     chatListScrollPixels: config.chatListScrollPixels,
@@ -120,6 +90,8 @@ async function printRunParameters(
     state: config.agentBrowser.state,
     headed: config.agentBrowser.headed,
     agentBrowserBaseArgs,
+    account: config.account,
+    perContactChain: config.perContactChain,
     jobEntryLocators: config.jobEntryLocators,
     conversationEntryLocators: config.conversationEntryLocators || [],
     traceTargets: config.traceTargets || [],

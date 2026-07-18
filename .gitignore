@@ -1,5 +1,6 @@
 node_modules/
 .DS_Store
+dist/
 output/**/*.json
 output/**/*.txt
 output/**/*.png
