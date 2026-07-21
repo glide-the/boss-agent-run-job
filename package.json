@@ -7,7 +7,8 @@
     "scripts/resolve-chrome-executable"
   ],
   "dependencies": {
-    "@boss-agent/resolve-chrome-executable": "workspace:*"
+    "@boss-agent/resolve-chrome-executable": "workspace:*",
+    "playwright": "^1.61.1"
   },
   "scripts": {
     "trace": "bun run src/trace-boss.ts",

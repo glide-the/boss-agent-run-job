@@ -81,7 +81,7 @@ export class ManualStrategy implements IAccountSwitchStrategy {
   readonly name = "manual" as const;
 
   async execute(ctx: AccountSwitchContext): Promise<AccountSwitchResult> {
-    console.log("[account-switch] manual strategy: please switch accounts in the opened Chrome window. The script will wait for login detection.");
+    console.log("[account-switch] 手动策略：请在已打开的 Chrome 窗口中切换/登录账号，脚本会等待登录成功后继续。");
     await ctx.trace("account-switch-manual", {
       reason: "waiting for user to switch account manually in the browser",
       waitForLogin: ctx.config.account?.waitForLogin ?? true

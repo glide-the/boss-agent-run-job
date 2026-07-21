@@ -6,7 +6,7 @@
     "loginCheckUrl": "https://www.zhipin.com/web/geek/chat",
     "loginCheckSelectors": [".chat-container", ".chat-list", ".friend-list"],
     "loginPollIntervalMs": 3000,
-    "loginTimeoutMs": 20000,
+    "loginTimeoutMs": 120000,
     "description": "manual: user is expected to switch account in the browser before login wait"
   },
   "perContactChain": {

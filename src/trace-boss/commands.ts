@@ -174,22 +174,23 @@ export function buildDomTextClickScript(value: string, exact = false) {
 
 export async function agent(config: Config, args: string[], options: { optional?: boolean } = {}) {
   const fullArgs = [...buildAgentBrowserBaseArgs(config.agentBrowser), ...args];
-  const result = await run("agent-browser", fullArgs, options.optional);
+  const result = await run("agent-browser", fullArgs, options.optional, (options as { env?: Record<string, string> }).env);
   return result.stdout;
 }
 
-export async function runBatch(config: Config, commands: string[], options: { optional?: boolean } = {}) {
+export async function runBatch(config: Config, commands: string[], options: { optional?: boolean; env?: Record<string, string> } = {}) {
   return await agent(config, ["batch", ...commands], options);
 }
 
-async function run(commandName: string, args: string[], optional = false) {
+async function run(commandName: string, args: string[], optional = false, env?: Record<string, string>) {
   const displayCommand = [commandName, ...args.map(shellQuote)].join(" ");
   await appendFile(join(projectRoot, "output", "agent-browser-commands.log"), `${displayCommand}\n`);
 
   return await new Promise<{ stdout: string; stderr: string }>((resolvePromise, reject) => {
     const child = spawn(commandName, args, {
       cwd: projectRoot,
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
+      env: env ? { ...process.env, ...env } : process.env
     });
 
     let stdout = "";
