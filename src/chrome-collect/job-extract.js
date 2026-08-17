@@ -45,3 +45,34 @@ export async function openAndExtractJob(browser, tab) {
   const jobTab = await browser.user.claimTab(jobTabInfo);
   return await extractJobDetail(jobTab);
 }
+
+/**
+ * 单标签复用版 JD 抽取：全程只用一个详情标签页。
+ * state = { jobTab: null } 跨调用复用。
+ * 流程：点击「查看职位」→ 捕获新开的 job_detail 标签 URL → 关闭新标签
+ * → 复用标签 goto 同一 URL → 抽取。
+ */
+export async function openAndExtractJobReuse(browser, tab, state) {
+  const beforeUrls = new Set((await browser.user.openTabs()).map((t) => t.url));
+  await tab.playwright.locator(".chat-position-content .right-content").first().click();
+  await tab.playwright.waitForTimeout(4000);
+  const after = await browser.user.openTabs();
+  const newInfo = after.find((t) => /job_detail/.test(t.url || "") && !beforeUrls.has(t.url));
+  const anyInfo = after.find((t) => /job_detail/.test(t.url || ""));
+  const url = (newInfo && newInfo.url) || (anyInfo && anyInfo.url) || null;
+  if (!url) return { error: "job detail tab not found" };
+  // 关闭本次新开的详情标签，保持用户浏览器干净
+  if (newInfo) {
+    try {
+      const nt = await browser.user.claimTab(newInfo);
+      await nt.close();
+    } catch {}
+  }
+  if (!state.jobTab) {
+    state.jobTab = await browser.tabs.new();
+  }
+  await state.jobTab.goto(url);
+  await state.jobTab.playwright.waitForLoadState({ state: "domcontentloaded", timeoutMs: 15000 });
+  await state.jobTab.playwright.waitForTimeout(2500);
+  return await extractJobDetail(state.jobTab);
+}

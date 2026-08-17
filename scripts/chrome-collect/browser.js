@@ -8,7 +8,11 @@ const path = globalThis.__nodePath;
 
 export function findChromePluginRoot() {
   const candidates = [
+    path.join(os.homedir(), "Downloads/codex-original-dmg-codex-home/.tmp/bundled-marketplaces/openai-bundled/plugins/chrome"),
+    path.join(os.homedir(), ".codex/plugins/cache/openai-bundled/browser"),
+    path.join(os.homedir(), ".codex/plugins/cache/openai-bundled/chrome"),
     path.join(os.homedir(), "Downloads/codex-original-dmg-codex-home/plugins/cache/openai-bundled/chrome"),
+    path.join(os.homedir(), "Downloads/codex-original-dmg-codex-home/plugins/cache/openai-bundled/browser"),
     path.join(os.homedir(), ".codex/plugins/cache/openai-bundled/chrome"),
   ];
   for (const base of candidates) {
